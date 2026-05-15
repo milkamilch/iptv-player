@@ -29,13 +29,18 @@ export default function Toolbar({
   return (
     <header className="toolbar">
       <div className="toolbar-left">
-        <span className="toolbar-logo">📺 IPTV Player</span>
+        <span className="toolbar-logo">
+          <span className="toolbar-logo-dot" />
+          IPTV
+        </span>
+
         {channelCount > 0 && (
-          <span className="toolbar-count">{channelCount} Kanäle</span>
+          <span className="toolbar-count">{channelCount.toLocaleString()}</span>
         )}
+
         {account && (
           <span className="toolbar-account" title={account.baseUrl}>
-            🔗 {account.username}@{new URL(account.baseUrl).hostname}
+            {account.username}@{new URL(account.baseUrl).hostname}
           </span>
         )}
       </div>
@@ -44,49 +49,54 @@ export default function Toolbar({
         <button
           className={`toolbar-btn ${sidebarOpen ? 'active' : ''}`}
           onClick={onToggleSidebar}
-          title="Kanalliste ein-/ausblenden"
+          title="Kanalliste"
         >
-          ☰ Kanäle
+          Kanäle
         </button>
 
+        <div className="toolbar-separator" />
+
         <div className="toolbar-group">
-          <button className="toolbar-btn" onClick={onOpenFile} disabled={loading}>
-            📂 M3U öffnen
+          <button className="toolbar-btn" onClick={onOpenFile} disabled={loading} title="M3U-Datei öffnen">
+            M3U
           </button>
           <button
             className={`toolbar-btn icon-btn ${showUrlBox ? 'active' : ''}`}
             onClick={() => { setShowUrlBox((v) => !v); setShowEpgBox(false); }}
             title="M3U-URL laden"
           >
-            🔗
+            URL
           </button>
         </div>
 
         <div className="toolbar-group">
-          <button className="toolbar-btn" onClick={onOpenEPG} disabled={loading}>
-            📅 EPG öffnen
+          <button className="toolbar-btn" onClick={onOpenEPG} disabled={loading} title="EPG-Datei öffnen">
+            EPG
           </button>
           <button
             className={`toolbar-btn icon-btn ${showEpgBox ? 'active' : ''}`}
             onClick={() => { setShowEpgBox((v) => !v); setShowUrlBox(false); }}
             title="EPG-URL laden"
           >
-            🔗
+            URL
           </button>
         </div>
 
         <button
           className={`toolbar-btn ${epgBarOpen ? 'active' : ''}`}
           onClick={onToggleEPG}
-          title="Programmführer ein-/ausblenden"
+          title="Programmführer"
         >
-          📋 EPG
+          Programm
         </button>
 
         {loading && <div className="toolbar-spinner" />}
+
+        <div className="toolbar-separator" />
+
         {onLogout && (
           <button className="toolbar-btn toolbar-btn-logout" onClick={onLogout} title="Abmelden">
-            ⏏ Abmelden
+            Abmelden
           </button>
         )}
       </div>
@@ -97,7 +107,7 @@ export default function Toolbar({
           <input
             className="url-input"
             type="url"
-            placeholder="http://..."
+            placeholder="http://…"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleLoadUrl()}
@@ -114,7 +124,7 @@ export default function Toolbar({
           <input
             className="url-input"
             type="url"
-            placeholder="http://...xmltv.xml"
+            placeholder="http://…xmltv.xml"
             value={epgUrlInput}
             onChange={(e) => setEpgUrlInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleLoadEPGUrl()}
