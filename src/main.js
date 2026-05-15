@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import path from 'node:path';
 import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
