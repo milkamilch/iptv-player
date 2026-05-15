@@ -13,6 +13,11 @@ export default function App() {
   const [epg, setEpg]                   = useState({});
   const [favorites, setFavorites]       = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
+
+  function selectChannel(ch) {
+    setActiveChannel(ch);
+    if (ch) window.iptv.storeSet('lastChannel', { id: ch.id, name: ch.name });
+  }
   const [activeGroup, setActiveGroup]   = useState('Alle');
   const [search, setSearch]             = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(true);
@@ -31,7 +36,17 @@ export default function App() {
       if (Array.isArray(favs))  setFavorites(favs);
       if (activeAcc)            handleLoginSuccess(activeAcc, false);
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Restore last channel once channels are loaded
+  useEffect(() => {
+    if (!channels.length) return;
+    window.iptv.storeGet('lastChannel').then((saved) => {
+      if (!saved) return;
+      const ch = channels.find((c) => c.id === saved.id);
+      if (ch) setActiveChannel(ch);
+    });
+  }, [channels]);
 
   function showToast(msg, type = 'info') {
     setToast({ msg, type });
@@ -204,7 +219,7 @@ export default function App() {
             activeGroup={activeGroup}
             onGroupChange={setActiveGroup}
             activeChannel={activeChannel}
-            onChannelSelect={setActiveChannel}
+            onChannelSelect={selectChannel}
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             search={search}

@@ -555,3 +555,41 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, -apple
 }
 .toolbar-btn-logout { color: var(--red); border-color: var(--red); opacity: 0.8; }
 .toolbar-btn-logout:hover { background: var(--red); color: #1e1e2e; opacity: 1; }
+
+/* ── Resume overlay ── */
+.resume-overlay { background: rgba(0,0,0,0.65); }
+.resume-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.resume-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.resume-time  { font-size: 0.9rem; color: var(--subtext); }
+.resume-time strong { color: var(--accent); }
+.resume-actions { display: flex; gap: 0.75rem; margin-top: 0.25rem; }
+.resume-btn-primary {
+  padding: 0.45rem 1.2rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--accent);
+  color: #1e1e2e;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.resume-btn-secondary {
+  padding: 0.45rem 1.2rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--subtext);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.resume-btn-secondary:hover { border-color: var(--text); color: var(--text); }
