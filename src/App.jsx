@@ -42,12 +42,9 @@ export default function App() {
     setAccount(acc);
     setLoading(true);
 
-    // Build Xtream Codes M3U URL
-    const m3uUrl = `${acc.baseUrl}/get.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}&type=m3u_plus&output=ts`;
-    const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
-
     try {
-      const chs = await window.iptv.loadM3UUrl(m3uUrl);
+      // Use Xtream Codes JSON API — works even when M3U endpoint is blocked
+      const chs = await window.iptv.loadXtreamChannels(acc.baseUrl, acc.username, acc.password);
       setChannels(chs);
       setActiveGroup('Alle');
       showToast(`${chs.length} Kanäle geladen`, 'success');
@@ -55,15 +52,16 @@ export default function App() {
       showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
     }
 
+    setLoading(false);
+
     // Load EPG in background (non-blocking)
+    const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
     window.iptv.loadXMLTVUrl(epgUrl)
       .then((data) => {
         setEpg(data);
         showToast(`EPG geladen: ${Object.keys(data).length} Kanäle`, 'info');
       })
-      .catch(() => {}); // EPG is optional
-
-    setLoading(false);
+      .catch(() => {});
 
     if (save) {
       // Save account to list (avoid duplicates)

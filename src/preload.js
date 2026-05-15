@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('iptv', {
   openXMLTVFile:    ()          => ipcRenderer.invoke('open-xmltv-file'),
   loadXMLTVUrl:     (url)       => ipcRenderer.invoke('load-xmltv-url', url),
   fetchXtream:      (url)       => ipcRenderer.invoke('fetch-xtream', url),
+  loadXtreamChannels: (base, user, pass) => ipcRenderer.invoke('load-xtream-channels', base, user, pass),
   storeGet:         (key)       => ipcRenderer.invoke('store-get', key),
   storeSet:         (key, val)  => ipcRenderer.invoke('store-set', key, val),
   storeDelete:      (key)       => ipcRenderer.invoke('store-delete', key),

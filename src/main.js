@@ -162,8 +162,8 @@ ipcMain.handle('load-xmltv-url', async (_event, url) => {
   });
 });
 
-// ── Xtream Codes API fetch ────────────────────────────────────────────────────
-ipcMain.handle('fetch-xtream', async (_event, url) => {
+// ── Xtream Codes API fetch (generic JSON) ────────────────────────────────────
+async function fetchJson(url) {
   const { net } = await import('electron');
   return new Promise((resolve, reject) => {
     const req = net.request(url);
@@ -172,13 +172,49 @@ ipcMain.handle('fetch-xtream', async (_event, url) => {
       res.on('data', (chunk) => { data += chunk.toString(); });
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch { reject(new Error('Ungültige Antwort vom Server')); }
+        catch { reject(new Error('Ungültige JSON-Antwort')); }
       });
       res.on('error', reject);
     });
     req.on('error', reject);
     req.end();
   });
+}
+
+ipcMain.handle('fetch-xtream', async (_event, url) => fetchJson(url));
+
+// ── Xtream Codes: load all live channels via JSON API ────────────────────────
+ipcMain.handle('load-xtream-channels', async (_event, baseUrl, username, password) => {
+  const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+
+  // Fetch categories and streams in parallel
+  const [categories, streams] = await Promise.all([
+    fetchJson(`${base}&action=get_live_categories`),
+    fetchJson(`${base}&action=get_live_streams`),
+  ]);
+
+  // Build category id → name map
+  const catMap = {};
+  for (const cat of (categories || [])) {
+    catMap[cat.category_id] = cat.category_name;
+  }
+
+  // Convert streams to our channel format
+  const channels = (streams || []).map((s) => {
+    const catId = s.category_ids?.[0] || s.category_id;
+    const group = catMap[catId] || 'Alle';
+    const streamUrl = `${baseUrl}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}.m3u8`;
+    return {
+      id:     String(s.stream_id),
+      name:   s.name || 'Unbekannt',
+      url:    streamUrl,
+      group:  group,
+      logo:   s.stream_icon || '',
+      tvgId:  s.epg_channel_id || '',
+    };
+  });
+
+  return channels;
 });
 
 ipcMain.handle('store-get', (_event, key) => store.get(key));
