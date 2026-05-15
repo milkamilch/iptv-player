@@ -162,6 +162,25 @@ ipcMain.handle('load-xmltv-url', async (_event, url) => {
   });
 });
 
+// ── Xtream Codes API fetch ────────────────────────────────────────────────────
+ipcMain.handle('fetch-xtream', async (_event, url) => {
+  const { net } = await import('electron');
+  return new Promise((resolve, reject) => {
+    const req = net.request(url);
+    let data = '';
+    req.on('response', (res) => {
+      res.on('data', (chunk) => { data += chunk.toString(); });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { reject(new Error('Ungültige Antwort vom Server')); }
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+});
+
 ipcMain.handle('store-get', (_event, key) => store.get(key));
 ipcMain.handle('store-set', (_event, key, value) => { store.set(key, value); });
 ipcMain.handle('store-delete', (_event, key) => { store.delete(key); });

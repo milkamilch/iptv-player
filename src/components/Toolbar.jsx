@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 export default function Toolbar({
+  account, onLogout,
   onOpenFile, onLoadUrl, onOpenEPG, onLoadEPGUrl,
   sidebarOpen, onToggleSidebar,
   epgBarOpen, onToggleEPG,
@@ -31,6 +32,11 @@ export default function Toolbar({
         <span className="toolbar-logo">📺 IPTV Player</span>
         {channelCount > 0 && (
           <span className="toolbar-count">{channelCount} Kanäle</span>
+        )}
+        {account && (
+          <span className="toolbar-account" title={account.baseUrl}>
+            🔗 {account.username}@{new URL(account.baseUrl).hostname}
+          </span>
         )}
       </div>
 
@@ -78,6 +84,11 @@ export default function Toolbar({
         </button>
 
         {loading && <div className="toolbar-spinner" />}
+        {onLogout && (
+          <button className="toolbar-btn toolbar-btn-logout" onClick={onLogout} title="Abmelden">
+            ⏏ Abmelden
+          </button>
+        )}
       </div>
 
       {showUrlBox && (

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import LoginModal from './components/LoginModal.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
 import EPGBar from './components/EPGBar.jsx';
@@ -6,9 +7,11 @@ import Toolbar from './components/Toolbar.jsx';
 import './App.css';
 
 export default function App() {
+  const [account, setAccount]           = useState(null);   // { baseUrl, username, password }
+  const [savedAccounts, setSavedAccounts] = useState([]);
   const [channels, setChannels]         = useState([]);
-  const [epg, setEpg]                   = useState({});          // { tvgId: [programme, ...] }
-  const [favorites, setFavorites]       = useState([]);           // channel ids
+  const [epg, setEpg]                   = useState({});
+  const [favorites, setFavorites]       = useState([]);
   const [activeChannel, setActiveChannel] = useState(null);
   const [activeGroup, setActiveGroup]   = useState('Alle');
   const [search, setSearch]             = useState('');
@@ -17,14 +20,80 @@ export default function App() {
   const [loading, setLoading]           = useState(false);
   const [toast, setToast]               = useState(null);
 
-  // Persist favorites
+  // Load persisted data on startup
   useEffect(() => {
-    window.iptv.storeGet('favorites').then((f) => { if (Array.isArray(f)) setFavorites(f); });
+    Promise.all([
+      window.iptv.storeGet('savedAccounts'),
+      window.iptv.storeGet('favorites'),
+      window.iptv.storeGet('activeAccount'),
+    ]).then(([accs, favs, activeAcc]) => {
+      if (Array.isArray(accs))  setSavedAccounts(accs);
+      if (Array.isArray(favs))  setFavorites(favs);
+      if (activeAcc)            handleLoginSuccess(activeAcc, false);
+    });
   }, []);
 
   function showToast(msg, type = 'info') {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  async function handleLoginSuccess(acc, save = true) {
+    setAccount(acc);
+    setLoading(true);
+
+    // Build Xtream Codes M3U URL
+    const m3uUrl = `${acc.baseUrl}/get.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}&type=m3u_plus&output=ts`;
+    const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
+
+    try {
+      const chs = await window.iptv.loadM3UUrl(m3uUrl);
+      setChannels(chs);
+      setActiveGroup('Alle');
+      showToast(`${chs.length} Kanäle geladen`, 'success');
+    } catch (e) {
+      showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
+    }
+
+    // Load EPG in background (non-blocking)
+    window.iptv.loadXMLTVUrl(epgUrl)
+      .then((data) => {
+        setEpg(data);
+        showToast(`EPG geladen: ${Object.keys(data).length} Kanäle`, 'info');
+      })
+      .catch(() => {}); // EPG is optional
+
+    setLoading(false);
+
+    if (save) {
+      // Save account to list (avoid duplicates)
+      const accToStore = { baseUrl: acc.baseUrl, username: acc.username, password: acc.password };
+      setSavedAccounts((prev) => {
+        const filtered = prev.filter(
+          (a) => !(a.baseUrl === accToStore.baseUrl && a.username === accToStore.username)
+        );
+        const next = [accToStore, ...filtered].slice(0, 5); // max 5 saved accounts
+        window.iptv.storeSet('savedAccounts', next);
+        return next;
+      });
+      window.iptv.storeSet('activeAccount', accToStore);
+    }
+  }
+
+  function handleDeleteAccount(index) {
+    setSavedAccounts((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      window.iptv.storeSet('savedAccounts', next);
+      return next;
+    });
+  }
+
+  function handleLogout() {
+    setAccount(null);
+    setChannels([]);
+    setEpg({});
+    setActiveChannel(null);
+    window.iptv.storeDelete('activeAccount');
   }
 
   async function handleOpenM3UFile() {
@@ -35,10 +104,9 @@ export default function App() {
         setChannels(result.channels);
         setActiveGroup('Alle');
         showToast(`${result.channels.length} Kanäle geladen`, 'success');
-        await window.iptv.storeSet('lastM3UPath', result.path);
       }
     } catch (e) {
-      showToast('Fehler beim Laden: ' + e.message, 'error');
+      showToast('Fehler: ' + e.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -51,7 +119,6 @@ export default function App() {
       setChannels(chs);
       setActiveGroup('Alle');
       showToast(`${chs.length} Kanäle geladen`, 'success');
-      await window.iptv.storeSet('lastM3UUrl', url);
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {
@@ -63,11 +130,7 @@ export default function App() {
     setLoading(true);
     try {
       const data = await window.iptv.openXMLTVFile();
-      if (data) {
-        setEpg(data);
-        const count = Object.keys(data).length;
-        showToast(`EPG geladen: ${count} Kanäle`, 'success');
-      }
+      if (data) { setEpg(data); showToast(`EPG: ${Object.keys(data).length} Kanäle`, 'success'); }
     } catch (e) {
       showToast('EPG-Fehler: ' + e.message, 'error');
     } finally {
@@ -80,8 +143,7 @@ export default function App() {
     try {
       const data = await window.iptv.loadXMLTVUrl(url);
       setEpg(data);
-      showToast(`EPG geladen: ${Object.keys(data).length} Kanäle`, 'success');
-      await window.iptv.storeSet('lastEPGUrl', url);
+      showToast(`EPG: ${Object.keys(data).length} Kanäle`, 'success');
     } catch (e) {
       showToast('EPG-Fehler: ' + e.message, 'error');
     } finally {
@@ -91,16 +153,13 @@ export default function App() {
 
   function toggleFavorite(channelId) {
     setFavorites((prev) => {
-      const next = prev.includes(channelId)
-        ? prev.filter((id) => id !== channelId)
-        : [...prev, channelId];
+      const next = prev.includes(channelId) ? prev.filter((id) => id !== channelId) : [...prev, channelId];
       window.iptv.storeSet('favorites', next);
       return next;
     });
   }
 
   const groups = ['Alle', 'Favoriten', ...new Set(channels.map((c) => c.group).filter(Boolean))];
-
   const visibleChannels = channels.filter((c) => {
     if (activeGroup === 'Favoriten' && !favorites.includes(c.id)) return false;
     if (activeGroup !== 'Alle' && activeGroup !== 'Favoriten' && c.group !== activeGroup) return false;
@@ -108,9 +167,25 @@ export default function App() {
     return true;
   });
 
+  if (!account) {
+    return (
+      <>
+        <LoginModal
+          onLogin={handleLoginSuccess}
+          savedAccounts={savedAccounts}
+          onSelectAccount={(acc) => handleLoginSuccess(acc, false)}
+          onDeleteAccount={handleDeleteAccount}
+        />
+        {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+      </>
+    );
+  }
+
   return (
     <div className="app">
       <Toolbar
+        account={account}
+        onLogout={handleLogout}
         onOpenFile={handleOpenM3UFile}
         onLoadUrl={handleLoadM3UUrl}
         onOpenEPG={handleOpenEPG}
@@ -138,18 +213,13 @@ export default function App() {
             onSearch={setSearch}
           />
         )}
-
         <main className="app-main">
           <VideoPlayer channel={activeChannel} />
-          {epgBarOpen && activeChannel && (
-            <EPGBar channel={activeChannel} epg={epg} />
-          )}
+          {epgBarOpen && activeChannel && <EPGBar channel={activeChannel} epg={epg} />}
         </main>
       </div>
 
-      {toast && (
-        <div className={`toast toast-${toast.type}`}>{toast.msg}</div>
-      )}
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
     </div>
   );
 }
