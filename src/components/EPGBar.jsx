@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { matchProgrammes } from '../epg.js';
 
 function fmtTime(isoStr) {
   if (!isoStr) return '';
@@ -15,31 +16,7 @@ export default function EPGBar({ channel, epg }) {
   }, []);
 
   useEffect(() => {
-    if (!channel || !epg) { setProgrammes([]); return; }
-
-    // Try to match by tvgId
-    const tvgId = channel.tvgId;
-    let progs = epg[tvgId] || [];
-
-    // Fallback: try matching by channel name (lowercase)
-    if (!progs.length) {
-      const nameLower = channel.name.toLowerCase();
-      for (const [key, val] of Object.entries(epg)) {
-        if (key.toLowerCase().includes(nameLower) || nameLower.includes(key.toLowerCase())) {
-          progs = val;
-          break;
-        }
-      }
-    }
-
-    // Resolve dates and sort
-    const resolved = progs.map((p) => ({
-      ...p,
-      startDate: parseXMLTVDateStr(p.start),
-      stopDate:  p.stop ? parseXMLTVDateStr(p.stop) : null,
-    })).sort((a, b) => a.startDate - b.startDate);
-
-    setProgrammes(resolved);
+    setProgrammes(matchProgrammes(epg, channel));
   }, [channel, epg]);
 
   if (!programmes.length) {
@@ -93,17 +70,5 @@ export default function EPGBar({ channel, epg }) {
         ))}
       </div>
     </div>
-  );
-}
-
-function parseXMLTVDateStr(str) {
-  if (!str || str.length < 14) return null;
-  return new Date(
-    parseInt(str.slice(0, 4)),
-    parseInt(str.slice(4, 6)) - 1,
-    parseInt(str.slice(6, 8)),
-    parseInt(str.slice(8, 10)),
-    parseInt(str.slice(10, 12)),
-    parseInt(str.slice(12, 14))
   );
 }

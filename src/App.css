@@ -334,6 +334,7 @@ body {
   flex-direction: column;
   overflow: hidden;
   background: #000;
+  position: relative;
 }
 .video-wrapper {
   flex: 1;
@@ -748,3 +749,149 @@ body {
   transition: all 0.12s;
 }
 .resume-btn-secondary:hover { border-color: var(--subtext); color: var(--text); }
+
+/* ── TV-Guide grid overlay ── */
+.epg-grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 15, 0.94);
+  backdrop-filter: blur(2px);
+}
+.epg-grid-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.75rem;
+  height: 40px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.epg-grid-title { font-weight: 700; letter-spacing: -0.01em; }
+.epg-grid-sub { font-size: 0.75rem; color: var(--muted); }
+.epg-grid-bar-spacer { flex: 1; }
+
+.epg-grid-scroll {
+  flex: 1;
+  overflow: auto;
+}
+.epg-grid-inner { position: relative; }
+
+/* time axis */
+.epg-grid-timeline {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  background: var(--surface1);
+  border-bottom: 1px solid var(--border);
+}
+.epg-grid-corner {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: var(--surface1);
+  border-right: 1px solid var(--border);
+}
+.epg-grid-slots { position: relative; flex-shrink: 0; }
+.epg-grid-slot {
+  position: absolute;
+  top: 9px;
+  transform: translateX(-1px);
+  padding-left: 6px;
+  font-size: 0.72rem;
+  color: var(--subtext);
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* now line */
+.epg-grid-nowline {
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* rows */
+.epg-grid-row {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  height: 56px;
+}
+.epg-grid-row.active .epg-grid-channel { background: var(--accent-dim); }
+.epg-grid-channel {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.6rem;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+.epg-grid-channel:hover { background: var(--surface2); }
+.epg-grid-logo, .epg-grid-logo-ph {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  object-fit: contain;
+  background: var(--surface2);
+}
+.epg-grid-chname {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.epg-grid-track { position: relative; flex-shrink: 0; }
+.epg-grid-noepg {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.epg-grid-prog {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-align: left;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.epg-grid-prog:hover { background: var(--surface3); border-color: var(--subtext); z-index: 1; }
+.epg-grid-prog.live {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.epg-grid-prog-title {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.epg-grid-prog-time {
+  font-size: 0.68rem;
+  color: var(--subtext);
+}

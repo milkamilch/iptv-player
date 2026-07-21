@@ -3,6 +3,7 @@ import LoginModal from './components/LoginModal.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
 import EPGBar from './components/EPGBar.jsx';
+import EPGGrid from './components/EPGGrid.jsx';
 import Toolbar from './components/Toolbar.jsx';
 import './App.css';
 
@@ -22,6 +23,7 @@ export default function App() {
   const [search, setSearch]             = useState('');
   const [sidebarOpen, setSidebarOpen]   = useState(true);
   const [epgBarOpen, setEpgBarOpen]     = useState(true);
+  const [guideOpen, setGuideOpen]       = useState(false);
   const [loading, setLoading]           = useState(false);
   const [toast, setToast]               = useState(null);
 
@@ -47,6 +49,22 @@ export default function App() {
       if (ch) setActiveChannel(ch);
     });
   }, [channels]);
+
+  // Keyboard: "g" toggles the TV-Guide, "Esc" closes it.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') { setGuideOpen(false); return; }
+      const typing = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+      if (e.key === 'g' && !typing && account) setGuideOpen((v) => !v);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [account]);
+
+  function tuneChannel(ch) {
+    selectChannel(ch);
+    setGuideOpen(false);
+  }
 
   function showToast(msg, type = 'info') {
     setToast({ msg, type });
@@ -207,6 +225,8 @@ export default function App() {
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         epgBarOpen={epgBarOpen}
         onToggleEPG={() => setEpgBarOpen((v) => !v)}
+        guideOpen={guideOpen}
+        onToggleGuide={() => setGuideOpen((v) => !v)}
         loading={loading}
         channelCount={channels.length}
       />
@@ -229,6 +249,15 @@ export default function App() {
         <main className="app-main">
           <VideoPlayer channel={activeChannel} />
           {epgBarOpen && activeChannel && <EPGBar channel={activeChannel} epg={epg} />}
+          {guideOpen && (
+            <EPGGrid
+              channels={visibleChannels}
+              epg={epg}
+              activeChannel={activeChannel}
+              onSelect={tuneChannel}
+              onClose={() => setGuideOpen(false)}
+            />
+          )}
         </main>
       </div>
 

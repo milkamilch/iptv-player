@@ -5,6 +5,7 @@ export default function Toolbar({
   onOpenFile, onLoadUrl, onOpenEPG, onLoadEPGUrl,
   sidebarOpen, onToggleSidebar,
   epgBarOpen, onToggleEPG,
+  guideOpen, onToggleGuide,
   loading, channelCount,
 }) {
   const [urlInput, setUrlInput]       = useState('');
@@ -88,6 +89,14 @@ export default function Toolbar({
           title="Programmführer"
         >
           Programm
+        </button>
+
+        <button
+          className={`toolbar-btn ${guideOpen ? 'active' : ''}`}
+          onClick={onToggleGuide}
+          title="TV-Guide (Taste g)"
+        >
+          Guide
         </button>
 
         {loading && <div className="toolbar-spinner" />}
