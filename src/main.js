@@ -219,6 +219,109 @@ ipcMain.handle('load-xtream-channels', async (_event, baseUrl, username, passwor
   return channels;
 });
 
+// ── Xtream Codes: load all VOD (movies) via JSON API ─────────────────────────
+ipcMain.handle('load-xtream-vod', async (_event, baseUrl, username, password) => {
+  const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  const [categories, streams] = await Promise.all([
+    fetchJson(`${base}&action=get_vod_categories`),
+    fetchJson(`${base}&action=get_vod_streams`),
+  ]);
+  const catMap = {};
+  for (const cat of (categories || [])) catMap[cat.category_id] = cat.category_name;
+
+  return (streams || []).map((s) => {
+    const catId = s.category_ids?.[0] || s.category_id;
+    return {
+      id:           String(s.stream_id),
+      name:         s.name || 'Unbekannt',
+      group:        catMap[catId] || 'Alle',
+      logo:         s.stream_icon || '',
+      containerExt: s.container_extension || 'mp4',
+      rating:       s.rating || '',
+      year:         s.year || '',
+      type:         'movie',
+    };
+  });
+});
+
+// ── Xtream Codes: load all series via JSON API ───────────────────────────────
+ipcMain.handle('load-xtream-series', async (_event, baseUrl, username, password) => {
+  const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  const [categories, series] = await Promise.all([
+    fetchJson(`${base}&action=get_series_categories`),
+    fetchJson(`${base}&action=get_series`),
+  ]);
+  const catMap = {};
+  for (const cat of (categories || [])) catMap[cat.category_id] = cat.category_name;
+
+  return (series || []).map((s) => {
+    const catId = s.category_ids?.[0] || s.category_id;
+    return {
+      id:     String(s.series_id),
+      name:   s.name || 'Unbekannt',
+      group:  catMap[catId] || 'Alle',
+      logo:   s.cover || '',
+      plot:   s.plot || '',
+      genre:  s.genre || '',
+      rating: s.rating || '',
+      year:   s.year || s.releaseDate || '',
+      type:   'series',
+    };
+  });
+});
+
+// ── Xtream Codes: single movie detail ────────────────────────────────────────
+ipcMain.handle('load-xtream-vod-info', async (_event, baseUrl, username, password, vodId) => {
+  const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  const data = await fetchJson(`${base}&action=get_vod_info&vod_id=${vodId}`);
+  const info = data?.info || {};
+  const movie = data?.movie_data || {};
+  return {
+    plot:         info.plot || info.description || '',
+    genre:        info.genre || '',
+    year:         info.releasedate || info.year || '',
+    rating:       info.rating || '',
+    duration:     info.duration || '',
+    cast:         info.cast || info.actors || '',
+    director:     info.director || '',
+    image:        info.movie_image || info.cover_big || '',
+    containerExt: movie.container_extension || '',
+  };
+});
+
+// ── Xtream Codes: series detail (seasons + episodes, normalized) ──────────────
+ipcMain.handle('load-xtream-series-info', async (_event, baseUrl, username, password, seriesId) => {
+  const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+  const data = await fetchJson(`${base}&action=get_series_info&series_id=${seriesId}`);
+  const info = data?.info || {};
+  const epMap = data?.episodes || {};
+
+  const seasons = Object.keys(epMap)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((seasonKey) => ({
+      season: Number(seasonKey),
+      episodes: (epMap[seasonKey] || []).map((e) => ({
+        id:           String(e.id),
+        name:         e.title || `Episode ${e.episode_num}`,
+        episodeNum:   e.episode_num,
+        containerExt: e.container_extension || 'mp4',
+        plot:         e.info?.plot || '',
+        duration:     e.info?.duration || '',
+      })),
+    }));
+
+  return {
+    info: {
+      plot:  info.plot || '',
+      genre: info.genre || '',
+      cover: info.cover || '',
+      cast:  info.cast || '',
+      rating: info.rating || '',
+    },
+    seasons,
+  };
+});
+
 ipcMain.handle('store-get', (_event, key) => store.get(key));
 ipcMain.handle('store-set', (_event, key, value) => { store.set(key, value); });
 ipcMain.handle('store-delete', (_event, key) => { store.delete(key); });

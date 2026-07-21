@@ -1,38 +1,29 @@
 import { useRef, useEffect } from 'react';
 
+const RENDER_CAP = 300; // avoid rendering tens of thousands of VOD rows at once
+
 export default function Sidebar({
-  channels, groups, activeGroup, onGroupChange,
-  activeChannel, onChannelSelect,
+  mode, items, groups, activeGroup, onGroupChange,
+  activeItemId, onItemSelect,
   favorites, onToggleFavorite,
-  search, onSearch,
 }) {
-  const activeRef   = useRef(null);
+  const activeRef    = useRef(null);
   const activeCatRef = useRef(null);
+  const isLive = mode === 'live';
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeChannel]);
+  }, [activeItemId]);
 
   useEffect(() => {
     activeCatRef.current?.scrollIntoView({ block: 'nearest' });
   }, [activeGroup]);
 
+  const shown = items.slice(0, RENDER_CAP);
+  const hidden = items.length - shown.length;
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-search">
-        <svg className="search-icon" viewBox="0 0 20 20" fill="none">
-          <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
-          <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Suche…"
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-        />
-      </div>
-
       <div className="sidebar-body">
         <nav className="cat-nav">
           {groups.map((g) => (
@@ -51,38 +42,43 @@ export default function Sidebar({
         </nav>
 
         <ul className="channel-list">
-          {channels.length === 0 && (
-            <li className="channel-empty">Keine Kanäle</li>
+          {items.length === 0 && (
+            <li className="channel-empty">Keine Einträge</li>
           )}
-          {channels.map((ch) => {
-            const isFav    = favorites.includes(ch.id);
-            const isActive = activeChannel?.id === ch.id;
+          {shown.map((item) => {
+            const isFav    = favorites.includes(item.id);
+            const isActive = activeItemId === item.id;
             return (
               <li
-                key={ch.id}
+                key={item.id}
                 ref={isActive ? activeRef : null}
                 className={`channel-item ${isActive ? 'active' : ''}`}
-                onClick={() => onChannelSelect(ch)}
+                onClick={() => onItemSelect(item)}
               >
-                {ch.logo ? (
+                {item.logo ? (
                   <img
                     className="channel-logo"
-                    src={ch.logo}
+                    src={item.logo}
                     alt=""
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 ) : (
                   <div className="channel-logo-ph" />
                 )}
-                <span className="channel-name">{ch.name}</span>
-                <button
-                  className={`fav-btn ${isFav ? 'fav-on' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); onToggleFavorite(ch.id); }}
-                  title={isFav ? 'Aus Favoriten entfernen' : 'Favorit'}
-                >★</button>
+                <span className="channel-name">{item.name}</span>
+                {isLive && (
+                  <button
+                    className={`fav-btn ${isFav ? 'fav-on' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(item.id); }}
+                    title={isFav ? 'Aus Favoriten entfernen' : 'Favorit'}
+                  >★</button>
+                )}
               </li>
             );
           })}
+          {hidden > 0 && (
+            <li className="channel-more">+ {hidden.toLocaleString()} weitere — Kategorie wählen oder oben suchen</li>
+          )}
         </ul>
       </div>
     </aside>

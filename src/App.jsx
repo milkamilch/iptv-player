@@ -4,28 +4,36 @@ import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
 import EPGBar from './components/EPGBar.jsx';
 import EPGGrid from './components/EPGGrid.jsx';
+import MovieDetail from './components/MovieDetail.jsx';
+import SeriesDetail from './components/SeriesDetail.jsx';
+import SearchResults from './components/SearchResults.jsx';
 import Toolbar from './components/Toolbar.jsx';
+import { movieUrl, episodeUrl } from './xtream.js';
 import './App.css';
 
 export default function App() {
-  const [account, setAccount]           = useState(null);   // { baseUrl, username, password }
+  const [account, setAccount]             = useState(null);   // { baseUrl, username, password }
   const [savedAccounts, setSavedAccounts] = useState([]);
-  const [channels, setChannels]         = useState([]);
-  const [epg, setEpg]                   = useState({});
-  const [favorites, setFavorites]       = useState([]);
-  const [activeChannel, setActiveChannel] = useState(null);
+  const [channels, setChannels]           = useState([]);
+  const [movies, setMovies]               = useState([]);
+  const [series, setSeries]               = useState([]);
+  const [moviesLoading, setMoviesLoading] = useState(false);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [epg, setEpg]                     = useState({});
+  const [favorites, setFavorites]         = useState([]);
 
-  function selectChannel(ch) {
-    setActiveChannel(ch);
-    if (ch) window.iptv.storeSet('lastChannel', { id: ch.id, name: ch.name });
-  }
-  const [activeGroup, setActiveGroup]   = useState('Alle');
-  const [search, setSearch]             = useState('');
-  const [sidebarOpen, setSidebarOpen]   = useState(true);
-  const [epgBarOpen, setEpgBarOpen]     = useState(true);
-  const [guideOpen, setGuideOpen]       = useState(false);
-  const [loading, setLoading]           = useState(false);
-  const [toast, setToast]               = useState(null);
+  const [mode, setMode]                   = useState('live'); // 'live' | 'movies' | 'series'
+  const [activePlayable, setActivePlayable] = useState(null); // { id, name, url, type }
+  const [detailItem, setDetailItem]       = useState(null);   // { type:'movie'|'series', item }
+  const [globalQuery, setGlobalQuery]     = useState('');
+  const [activeGroup, setActiveGroup]     = useState('Alle');
+  const [sidebarOpen, setSidebarOpen]     = useState(true);
+  const [epgBarOpen, setEpgBarOpen]       = useState(true);
+  const [guideOpen, setGuideOpen]         = useState(false);
+  const [loading, setLoading]             = useState(false);
+  const [toast, setToast]                 = useState(null);
+
+  const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
 
   // Load persisted data on startup
   useEffect(() => {
@@ -40,37 +48,75 @@ export default function App() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore last channel once channels are loaded
+  // Restore last channel once channels are loaded (if nothing playing yet)
   useEffect(() => {
-    if (!channels.length) return;
+    if (!channels.length || activePlayable) return;
     window.iptv.storeGet('lastChannel').then((saved) => {
       if (!saved) return;
       const ch = channels.find((c) => c.id === saved.id);
-      if (ch) setActiveChannel(ch);
+      if (ch) setActivePlayable({ ...ch, type: 'live' });
     });
-  }, [channels]);
+  }, [channels]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keyboard: "g" toggles the TV-Guide, "Esc" closes it.
+  // Keyboard: "g" toggles the TV-Guide (live only); "Esc" backs out one level.
   useEffect(() => {
     function onKey(e) {
-      if (e.key === 'Escape') { setGuideOpen(false); return; }
+      if (e.key === 'Escape') {
+        if (guideOpen) setGuideOpen(false);
+        else if (globalQuery) setGlobalQuery('');
+        else if (detailItem) setDetailItem(null);
+        return;
+      }
       const typing = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
-      if (e.key === 'g' && !typing && account) setGuideOpen((v) => !v);
+      if (e.key === 'g' && !typing && account && mode === 'live') setGuideOpen((v) => !v);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [account]);
-
-  function tuneChannel(ch) {
-    selectChannel(ch);
-    setGuideOpen(false);
-  }
+  }, [account, mode, guideOpen, globalQuery, detailItem]);
 
   function showToast(msg, type = 'info') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   }
 
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  function switchMode(m) {
+    setMode(m);
+    setActiveGroup('Alle');
+    setDetailItem(null);
+    setGlobalQuery('');
+  }
+
+  function selectChannel(ch) {
+    setActivePlayable({ ...ch, type: 'live' });
+    setDetailItem(null);
+    setGuideOpen(false);
+    window.iptv.storeSet('lastChannel', { id: ch.id, name: ch.name });
+  }
+
+  function playMovie(movie) {
+    setActivePlayable({ id: movie.id, name: movie.name, url: movieUrl(account, movie), type: 'movie' });
+    setDetailItem(null);
+  }
+
+  function playEpisode(ep) {
+    setActivePlayable({ id: ep.id, name: ep.name, url: episodeUrl(account, ep), type: 'episode' });
+    setDetailItem(null);
+  }
+
+  function openDetail(type, item) {
+    setDetailItem({ type, item });
+    setGlobalQuery('');
+  }
+
+  function handleSearchSelect(type, item) {
+    if (type === 'live')        { switchMode('live');   selectChannel(item); }
+    else if (type === 'movie')  { setMode('movies'); setActiveGroup('Alle'); openDetail('movie', item); }
+    else if (type === 'series') { setMode('series'); setActiveGroup('Alle'); openDetail('series', item); }
+    setGlobalQuery('');
+  }
+
+  // ── Loading ─────────────────────────────────────────────────────────────────
   async function handleLoginSuccess(acc, save = true) {
     setAccount(acc);
     setLoading(true);
@@ -90,14 +136,23 @@ export default function App() {
     // Load EPG in background (non-blocking)
     const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
     window.iptv.loadXMLTVUrl(epgUrl)
-      .then((data) => {
-        setEpg(data);
-        showToast(`EPG geladen: ${Object.keys(data).length} Kanäle`, 'info');
-      })
+      .then((data) => setEpg(data))
       .catch(() => {});
 
+    // Load VOD + series in background (needed for the global search)
+    setMoviesLoading(true);
+    window.iptv.loadXtreamVod(acc.baseUrl, acc.username, acc.password)
+      .then((m) => setMovies(Array.isArray(m) ? m : []))
+      .catch(() => {})
+      .finally(() => setMoviesLoading(false));
+
+    setSeriesLoading(true);
+    window.iptv.loadXtreamSeries(acc.baseUrl, acc.username, acc.password)
+      .then((s) => setSeries(Array.isArray(s) ? s : []))
+      .catch(() => {})
+      .finally(() => setSeriesLoading(false));
+
     if (save) {
-      // Save account to list (avoid duplicates)
       const accToStore = { baseUrl: acc.baseUrl, username: acc.username, password: acc.password };
       setSavedAccounts((prev) => {
         const filtered = prev.filter(
@@ -121,9 +176,12 @@ export default function App() {
 
   function handleLogout() {
     setAccount(null);
-    setChannels([]);
+    setChannels([]); setMovies([]); setSeries([]);
     setEpg({});
-    setActiveChannel(null);
+    setActivePlayable(null);
+    setDetailItem(null);
+    setGlobalQuery('');
+    setMode('live');
     window.iptv.storeDelete('activeAccount');
   }
 
@@ -190,13 +248,22 @@ export default function App() {
     });
   }
 
-  const groups = ['Alle', 'Favoriten', ...new Set(channels.map((c) => c.group).filter(Boolean))];
-  const visibleChannels = channels.filter((c) => {
-    if (activeGroup === 'Favoriten' && !favorites.includes(c.id)) return false;
-    if (activeGroup !== 'Alle' && activeGroup !== 'Favoriten' && c.group !== activeGroup) return false;
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+  // ── Derived: current collection, categories, visible items ───────────────────
+  const collection = mode === 'live' ? channels : mode === 'movies' ? movies : series;
+
+  const groups = mode === 'live'
+    ? ['Alle', 'Favoriten', ...new Set(channels.map((c) => c.group).filter(Boolean))]
+    : ['Alle', ...new Set(collection.map((c) => c.group).filter(Boolean))];
+
+  const visibleItems = collection.filter((c) => {
+    if (activeGroup === 'Favoriten') return favorites.includes(c.id);
+    if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
     return true;
   });
+
+  const activeItemId = detailItem ? detailItem.item.id
+    : mode === 'live' ? activeLiveChannel?.id
+    : null;
 
   if (!account) {
     return (
@@ -212,10 +279,16 @@ export default function App() {
     );
   }
 
+  const searching = globalQuery.trim().length > 0;
+
   return (
     <div className="app">
       <Toolbar
         account={account}
+        mode={mode}
+        onModeChange={switchMode}
+        globalQuery={globalQuery}
+        onGlobalSearch={setGlobalQuery}
         onLogout={handleLogout}
         onOpenFile={handleOpenM3UFile}
         onLoadUrl={handleLoadM3UUrl}
@@ -228,33 +301,68 @@ export default function App() {
         guideOpen={guideOpen}
         onToggleGuide={() => setGuideOpen((v) => !v)}
         loading={loading}
-        channelCount={channels.length}
+        channelCount={collection.length}
       />
 
       <div className="app-body">
         {sidebarOpen && (
           <Sidebar
-            channels={visibleChannels}
+            mode={mode}
+            items={visibleItems}
             groups={groups}
             activeGroup={activeGroup}
             onGroupChange={setActiveGroup}
-            activeChannel={activeChannel}
-            onChannelSelect={selectChannel}
+            activeItemId={activeItemId}
+            onItemSelect={(item) => {
+              if (mode === 'live') selectChannel(item);
+              else openDetail(mode === 'movies' ? 'movie' : 'series', item);
+            }}
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
-            search={search}
-            onSearch={setSearch}
           />
         )}
+
         <main className="app-main">
-          <VideoPlayer channel={activeChannel} />
-          {epgBarOpen && activeChannel && <EPGBar channel={activeChannel} epg={epg} />}
-          {guideOpen && (
+          {searching ? (
+            <SearchResults
+              query={globalQuery}
+              live={channels}
+              movies={movies}
+              series={series}
+              moviesLoading={moviesLoading}
+              seriesLoading={seriesLoading}
+              onSelect={handleSearchSelect}
+            />
+          ) : detailItem?.type === 'movie' ? (
+            <MovieDetail
+              movie={detailItem.item}
+              account={account}
+              onPlay={playMovie}
+              onBack={() => setDetailItem(null)}
+            />
+          ) : detailItem?.type === 'series' ? (
+            <SeriesDetail
+              series={detailItem.item}
+              account={account}
+              activeEpisodeId={activePlayable?.type === 'episode' ? activePlayable.id : null}
+              onPlayEpisode={playEpisode}
+              onBack={() => setDetailItem(null)}
+            />
+          ) : (
+            <>
+              <VideoPlayer channel={activePlayable} />
+              {epgBarOpen && mode === 'live' && activeLiveChannel && (
+                <EPGBar channel={activeLiveChannel} epg={epg} />
+              )}
+            </>
+          )}
+
+          {guideOpen && mode === 'live' && (
             <EPGGrid
-              channels={visibleChannels}
+              channels={visibleItems}
               epg={epg}
-              activeChannel={activeChannel}
-              onSelect={tuneChannel}
+              activeChannel={activeLiveChannel}
+              onSelect={selectChannel}
               onClose={() => setGuideOpen(false)}
             />
           )}
