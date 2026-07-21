@@ -12,6 +12,18 @@ module.exports = {
   rebuildConfig: {},
   makers: [
     {
+      name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
+      config: {
+        name: 'iptv_player',
+        authors: 'Lars Wenner',
+        description: 'Lightweight IPTV player with M3U playlists, EPG and HLS streaming',
+        setupIcon: './assets/icon.ico',
+        setupExe: 'IPTV-Player-Setup.exe',
+        iconUrl: 'https://raw.githubusercontent.com/milkamilch/iptv-player/master/assets/icon.png',
+      },
+    },
+    {
       name: '@electron-forge/maker-deb',
       config: {
         options: {
