@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import LoginModal from './components/LoginModal.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
-import EPGBar from './components/EPGBar.jsx';
 import EPGGrid from './components/EPGGrid.jsx';
 import MovieDetail from './components/MovieDetail.jsx';
 import SeriesDetail from './components/SeriesDetail.jsx';
@@ -27,7 +26,6 @@ export default function App() {
   const [detailItem, setDetailItem]       = useState(null);   // { type:'movie'|'series', item }
   const [globalQuery, setGlobalQuery]     = useState('');
   const [activeGroup, setActiveGroup]     = useState('Alle');
-  const [sidebarOpen, setSidebarOpen]     = useState(true);
   const [epgBarOpen, setEpgBarOpen]       = useState(true);
   const [guideOpen, setGuideOpen]         = useState(false);
   const [loading, setLoading]             = useState(false);
@@ -280,94 +278,96 @@ export default function App() {
   }
 
   const searching = globalQuery.trim().length > 0;
+  const epgReady = Object.keys(epg).length > 0;
+  const host = (() => { try { return new URL(account.baseUrl).hostname; } catch { return account.baseUrl; } })();
 
   return (
     <div className="app">
+      <main className="app-main">
+        {searching ? (
+          <SearchResults
+            query={globalQuery}
+            live={channels}
+            movies={movies}
+            series={series}
+            moviesLoading={moviesLoading}
+            seriesLoading={seriesLoading}
+            onSelect={handleSearchSelect}
+          />
+        ) : detailItem?.type === 'movie' ? (
+          <MovieDetail
+            movie={detailItem.item}
+            account={account}
+            onPlay={playMovie}
+            onBack={() => setDetailItem(null)}
+          />
+        ) : detailItem?.type === 'series' ? (
+          <SeriesDetail
+            series={detailItem.item}
+            account={account}
+            activeEpisodeId={activePlayable?.type === 'episode' ? activePlayable.id : null}
+            onPlayEpisode={playEpisode}
+            onBack={() => setDetailItem(null)}
+          />
+        ) : (
+          <VideoPlayer channel={activePlayable} epg={epg} showEpg={epgBarOpen} />
+        )}
+      </main>
+
       <Toolbar
-        account={account}
         mode={mode}
         onModeChange={switchMode}
-        globalQuery={globalQuery}
-        onGlobalSearch={setGlobalQuery}
-        onLogout={handleLogout}
         onOpenFile={handleOpenM3UFile}
         onLoadUrl={handleLoadM3UUrl}
         onOpenEPG={handleOpenEPG}
         onLoadEPGUrl={handleLoadEPGUrl}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
         epgBarOpen={epgBarOpen}
         onToggleEPG={() => setEpgBarOpen((v) => !v)}
         guideOpen={guideOpen}
         onToggleGuide={() => setGuideOpen((v) => !v)}
         loading={loading}
-        channelCount={collection.length}
       />
 
-      <div className="app-body">
-        {sidebarOpen && (
-          <Sidebar
-            mode={mode}
-            items={visibleItems}
-            groups={groups}
-            activeGroup={activeGroup}
-            onGroupChange={setActiveGroup}
-            activeItemId={activeItemId}
-            onItemSelect={(item) => {
-              if (mode === 'live') selectChannel(item);
-              else openDetail(mode === 'movies' ? 'movie' : 'series', item);
-            }}
-            favorites={favorites}
-            onToggleFavorite={toggleFavorite}
-          />
-        )}
+      {mode === 'live' && activeLiveChannel && !searching && !detailItem && (
+        <div className="live-tag">
+          <span className="live-tag-dot" />
+          <span className="live-tag-text">LIVE · {activeLiveChannel.name}</span>
+        </div>
+      )}
 
-        <main className="app-main">
-          {searching ? (
-            <SearchResults
-              query={globalQuery}
-              live={channels}
-              movies={movies}
-              series={series}
-              moviesLoading={moviesLoading}
-              seriesLoading={seriesLoading}
-              onSelect={handleSearchSelect}
-            />
-          ) : detailItem?.type === 'movie' ? (
-            <MovieDetail
-              movie={detailItem.item}
-              account={account}
-              onPlay={playMovie}
-              onBack={() => setDetailItem(null)}
-            />
-          ) : detailItem?.type === 'series' ? (
-            <SeriesDetail
-              series={detailItem.item}
-              account={account}
-              activeEpisodeId={activePlayable?.type === 'episode' ? activePlayable.id : null}
-              onPlayEpisode={playEpisode}
-              onBack={() => setDetailItem(null)}
-            />
-          ) : (
-            <>
-              <VideoPlayer channel={activePlayable} />
-              {epgBarOpen && mode === 'live' && activeLiveChannel && (
-                <EPGBar channel={activeLiveChannel} epg={epg} />
-              )}
-            </>
-          )}
+      <button className="account-chip" onClick={handleLogout} title="Abmelden">
+        {account.username}@{host} · Abmelden
+      </button>
 
-          {guideOpen && mode === 'live' && (
-            <EPGGrid
-              channels={visibleItems}
-              epg={epg}
-              activeChannel={activeLiveChannel}
-              onSelect={selectChannel}
-              onClose={() => setGuideOpen(false)}
-            />
-          )}
-        </main>
-      </div>
+      <Sidebar
+        mode={mode}
+        items={visibleItems}
+        groups={groups}
+        activeGroup={activeGroup}
+        onGroupChange={setActiveGroup}
+        activeItemId={activeItemId}
+        onItemSelect={(item) => {
+          if (mode === 'live') selectChannel(item);
+          else openDetail(mode === 'movies' ? 'movie' : 'series', item);
+        }}
+        favorites={favorites}
+        onToggleFavorite={toggleFavorite}
+        globalQuery={globalQuery}
+        onGlobalSearch={setGlobalQuery}
+        totalCount={collection.length}
+        epgReady={epgReady}
+        epg={epg}
+      />
+
+      {guideOpen && mode === 'live' && (
+        <EPGGrid
+          channels={visibleItems}
+          epg={epg}
+          activeChannel={activeLiveChannel}
+          onSelect={selectChannel}
+          onClose={() => setGuideOpen(false)}
+        />
+      )}
 
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
     </div>

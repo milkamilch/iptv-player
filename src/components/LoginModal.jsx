@@ -46,11 +46,18 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
     }
   }
 
+  function hostOf(acc) {
+    try { return new URL(acc.baseUrl).hostname; } catch { return acc.baseUrl; }
+  }
+
   return (
     <div className="login-overlay">
       <div className="login-box">
-        <div className="login-logo">📺</div>
-        <h1 className="login-title">IPTV Player</h1>
+        <div className="login-logo">
+          <span className="login-logo-dot" />
+          IPTV
+        </div>
+        <div className="login-subtitle">Xtream Codes kompatibel</div>
 
         {savedAccounts.length > 0 && (
           <div className="login-tabs">
@@ -58,7 +65,7 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
               className={`login-tab ${tab === 'saved' ? 'active' : ''}`}
               onClick={() => setTab('saved')}
             >
-              Gespeicherte Zugänge
+              Gespeicherte
             </button>
             <button
               className={`login-tab ${tab === 'new' ? 'active' : ''}`}
@@ -72,21 +79,23 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
         {tab === 'saved' && savedAccounts.length > 0 ? (
           <div className="saved-accounts">
             {savedAccounts.map((acc, i) => (
-              <div key={i} className="saved-account-row">
-                <button
-                  className="saved-account-btn"
-                  onClick={() => onSelectAccount(acc)}
-                >
-                  <span className="saved-acc-host">{new URL(acc.baseUrl).hostname}</span>
+              <div
+                key={i}
+                className="saved-account-row"
+                onClick={() => onSelectAccount(acc)}
+              >
+                <div className="saved-acc-avatar" style={i === 0 ? undefined : { background: 'linear-gradient(135deg,#3a3a42,#26262b)', color: '#9a9aa2' }}>
+                  {hostOf(acc)[0]?.toUpperCase() || '?'}
+                </div>
+                <div className="saved-acc-info">
+                  <span className="saved-acc-host">{hostOf(acc)}</span>
                   <span className="saved-acc-user">@{acc.username}</span>
-                </button>
+                </div>
                 <button
                   className="saved-acc-delete"
-                  onClick={() => onDeleteAccount(i)}
+                  onClick={(e) => { e.stopPropagation(); onDeleteAccount(i); }}
                   title="Zugang löschen"
-                >
-                  ✕
-                </button>
+                >✕</button>
               </div>
             ))}
             <button className="login-new-btn" onClick={() => setTab('new')}>
@@ -153,10 +162,6 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
             </button>
           </form>
         )}
-
-        <p className="login-hint">
-          Xtream Codes kompatibel — einfach URL, User und Passwort vom IPTV-Anbieter eingeben.
-        </p>
       </div>
     </div>
   );

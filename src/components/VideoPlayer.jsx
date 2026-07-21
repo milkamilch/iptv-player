@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import EPGBar from './EPGBar.jsx';
 
 // Save position every 5s, but only for non-live streams (duration > 0 and finite)
 const SAVE_INTERVAL_MS = 5000;
@@ -11,7 +12,7 @@ function isLiveStream(channel) {
   return channel?.stream_type === 'live' || channel?.url?.includes('/live/');
 }
 
-export default function VideoPlayer({ channel }) {
+export default function VideoPlayer({ channel, epg, showEpg }) {
   const videoRef    = useRef(null);
   const hlsRef      = useRef(null);
   const saveTimerRef = useRef(null);
@@ -177,9 +178,9 @@ export default function VideoPlayer({ channel }) {
     <div className="video-wrapper">
       {!channel && (
         <div className="video-empty">
-          <div className="video-empty-icon">📺</div>
-          <p>Kanal auswählen</p>
-          <p className="video-empty-sub">Lade eine M3U-Playlist und wähle einen Kanal links</p>
+          <div className="video-scanline" />
+          <p className="video-empty-title">LIVE FEED</p>
+          <p className="video-empty-sub">Wähle links einen Kanal, Film oder eine Serie</p>
         </div>
       )}
 
@@ -224,9 +225,11 @@ export default function VideoPlayer({ channel }) {
       )}
 
       {channel && (
-        <div className="video-controls">
-          <span className="video-ch-name">{channel.name}</span>
-          <div className="video-ctrl-right">
+        <div className="player-bar">
+          {showEpg && channel.type === 'live' && epg
+            ? <EPGBar channel={channel} epg={epg} />
+            : <span className="player-bar-name">{channel.name}</span>}
+          <div className="player-ctrl">
             <button className="ctrl-btn" onClick={handleMuteToggle} title="Ton">
               {muted ? '🔇' : '🔊'}
             </button>

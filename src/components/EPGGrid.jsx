@@ -75,12 +75,13 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
 
   return (
     <div className="epg-grid-overlay">
+      <div className="epg-grid-panel">
       <div className="epg-grid-bar">
         <span className="epg-grid-title">TV-Guide</span>
-        <span className="epg-grid-sub">{rows.length} Kanäle</span>
+        <span className="epg-grid-sub">{rows.length} Kanäle · heute</span>
         <div className="epg-grid-bar-spacer" />
-        <button className="toolbar-btn" onClick={scrollToNow} title="Zur aktuellen Zeit">Jetzt</button>
-        <button className="toolbar-btn" onClick={onClose} title="Schließen (Esc)">✕</button>
+        <button className="guide-now-btn" onClick={scrollToNow} title="Zur aktuellen Zeit">Jetzt</button>
+        <button className="guide-close" onClick={onClose} title="Schließen (Esc)">✕</button>
       </div>
 
       <div className="epg-grid-scroll" ref={scrollRef}>
@@ -140,6 +141,7 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );
