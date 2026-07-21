@@ -38,15 +38,17 @@ jobs:
 
           $installDir = Join-Path $env:LOCALAPPDATA 'iptv_player'
           if (-not (Test-Path $installDir)) { throw "Install directory not found: $installDir" }
-          $exe = Get-ChildItem -Recurse -Path $installDir -Filter 'iptv-player.exe' | Select-Object -First 1
-          if (-not $exe) { throw "Installed app executable not found under $installDir" }
+          # The real app lives in app-<version>\ ; the root exe is only a Squirrel stub.
+          $exe = Get-ChildItem -Recurse -Path $installDir -Filter 'iptv-player.exe' |
+                 Where-Object { $_.FullName -match '\\app-' } | Select-Object -First 1
+          if (-not $exe) { throw "Versioned app executable (app-*\iptv-player.exe) not found under $installDir" }
           Write-Host "✔ Installed: $($exe.FullName)"
 
           Write-Host "Launching app to verify it boots…"
           $p = Start-Process -FilePath $exe.FullName -ArgumentList '--no-sandbox' -PassThru
-          Start-Sleep -Seconds 15
+          Start-Sleep -Seconds 20
           if ($p.HasExited) { throw "App exited immediately (exit code $($p.ExitCode)) — boot failed" }
-          Write-Host "✔ App is running (pid $($p.Id)) after 15s — boot OK"
+          Write-Host "✔ App still running (pid $($p.Id)) after 20s — boot OK"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
 
       - name: Upload installer artifact
