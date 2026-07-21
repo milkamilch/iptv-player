@@ -1,20 +1,26 @@
 import { useState, useEffect } from 'react';
+import { getHistory, getWatched, playableKey } from '../progress.js';
 
-export default function SeriesDetail({ series, account, activeEpisodeId, onPlayEpisode, onBack }) {
+export default function SeriesDetail({ series, account, activeEpisodeId, onPlayEpisode, onBack, isFav, onToggleFav }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState(null);
+  const [history, setHistory] = useState({});
+  const [watched, setWatched] = useState({});
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setData(null);
     setSeason(null);
-    window.iptv
-      .loadXtreamSeriesInfo(account.baseUrl, account.username, account.password, series.id)
-      .then((d) => {
+    Promise.all([
+      window.iptv.loadXtreamSeriesInfo(account.baseUrl, account.username, account.password, series.id),
+      getHistory(),
+      getWatched(),
+    ])
+      .then(([d, h, w]) => {
         if (!alive) return;
-        setData(d);
+        setData(d); setHistory(h); setWatched(w);
         if (d.seasons?.length) setSeason(d.seasons[0].season);
       })
       .catch(() => {})
@@ -25,6 +31,25 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
   const cover = data?.info?.cover || series.logo;
   const meta = [series.year, data?.info?.genre || series.genre].filter(Boolean);
   const currentSeason = data?.seasons?.find((s) => s.season === season);
+
+  function play(ep, seasonNum) {
+    onPlayEpisode({ ...ep, season: seasonNum });
+  }
+
+  // Most recently watched episode across all seasons (for the resume button).
+  let resume = null;
+  for (const s of (data?.seasons || [])) {
+    for (const ep of s.episodes) {
+      const e = history[playableKey('episode', ep.id)];
+      if (e && (!resume || e.updatedAt > resume.updatedAt)) resume = { ep, season: s.season, ...e };
+    }
+  }
+
+  function progressPct(ep) {
+    const e = history[playableKey('episode', ep.id)];
+    if (!e || !e.duration) return 0;
+    return Math.min(100, Math.round((e.position / e.duration) * 100));
+  }
 
   return (
     <div className="detail">
@@ -39,6 +64,18 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
           {(data?.info?.rating || series.rating) && (
             <div className="detail-rating">★ {data?.info?.rating || series.rating}</div>
           )}
+          <div className="detail-actions">
+            {resume && (
+              <button className="detail-play" onClick={() => play(resume.ep, resume.season)}>
+                ▶ Fortsetzen · S{resume.season} E{resume.ep.episodeNum}
+              </button>
+            )}
+            <button
+              className={`detail-fav ${isFav ? 'on' : ''}`}
+              onClick={onToggleFav}
+              title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
+            >★</button>
+          </div>
           {(data?.info?.plot || series.plot) && (
             <p className="detail-plot">{data?.info?.plot || series.plot}</p>
           )}
@@ -67,20 +104,28 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
 
       {currentSeason && (
         <ul className="episode-list">
-          {currentSeason.episodes.map((ep) => (
-            <li
-              key={ep.id}
-              className={`episode-item ${ep.id === activeEpisodeId ? 'active' : ''}`}
-              onClick={() => onPlayEpisode(ep)}
-            >
-              <span className="episode-num">{ep.episodeNum}</span>
-              <div className="episode-body">
-                <span className="episode-name">{ep.name}</span>
-                {ep.plot && <span className="episode-plot">{ep.plot}</span>}
-              </div>
-              <span className="episode-play">▶</span>
-            </li>
-          ))}
+          {currentSeason.episodes.map((ep) => {
+            const isWatched = !!watched[playableKey('episode', ep.id)];
+            const pct = progressPct(ep);
+            return (
+              <li
+                key={ep.id}
+                className={`episode-item ${ep.id === activeEpisodeId ? 'active' : ''}`}
+                onClick={() => play(ep, currentSeason.season)}
+              >
+                <span className="episode-num">{ep.episodeNum}</span>
+                <div className="episode-body">
+                  <span className="episode-name">{ep.name}</span>
+                  {ep.plot && <span className="episode-plot">{ep.plot}</span>}
+                  {pct > 0 && (
+                    <div className="episode-progress"><div className="episode-progress-fill" style={{ width: `${pct}%` }} /></div>
+                  )}
+                </div>
+                {isWatched && <span className="episode-watched" title="Gesehen">✓</span>}
+                <span className="episode-play">▶</span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

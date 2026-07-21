@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
 import zlib from 'node:zlib';
+import { updateElectronApp } from 'update-electron-app';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import path from 'node:path';
@@ -368,6 +369,17 @@ ipcMain.handle('open-external', (_event, url) => shell.openExternal(url));
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   createWindow();
+
+  // Auto-update from GitHub Releases (packaged builds only).
+  if (app.isPackaged) {
+    try {
+      updateElectronApp({
+        repo: 'milkamilch/iptv-player',
+        updateInterval: '6 hours',
+      });
+    } catch { /* offline / no release yet — ignore */ }
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

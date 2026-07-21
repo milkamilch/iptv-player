@@ -8,9 +8,10 @@ const MODES = [
 
 export default function Toolbar({
   mode, onModeChange,
-  onOpenFile, onLoadUrl, onOpenEPG, onLoadEPGUrl,
+  onOpenFile, onLoadUrl, onOpenEPG, onLoadEPGUrl, onReload,
   epgBarOpen, onToggleEPG,
   guideOpen, onToggleGuide,
+  onOpenSettings,
   loading,
 }) {
   const [menuOpen, setMenuOpen]       = useState(false);
@@ -62,17 +63,21 @@ export default function Toolbar({
         )}
       </nav>
 
+      <button className="tb-pill tb-icon-pill" onClick={onOpenSettings} title="Einstellungen">⚙</button>
+
       <div className="tb-source">
         <button
           className={`tb-pill tb-icon-pill ${menuOpen ? 'active' : ''}`}
           onClick={() => { setMenuOpen((v) => !v); setUrlBox(null); }}
-          title="Playlist / EPG laden"
+          title="Playlist / EPG laden / neu laden"
         >
           {loading ? <span className="tb-spinner" /> : '＋'}
         </button>
 
         {menuOpen && (
           <div className="tb-menu">
+            <button className="tb-menu-item" onClick={() => { onReload(); setMenuOpen(false); }}>Neu laden</button>
+            <div className="tb-menu-sep" />
             <button className="tb-menu-item" onClick={() => { onOpenFile(); setMenuOpen(false); }}>M3U-Datei öffnen</button>
             <button className="tb-menu-item" onClick={() => { setUrlBox('m3u'); setUrlInput(''); }}>M3U-URL laden…</button>
             <div className="tb-menu-sep" />

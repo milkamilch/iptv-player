@@ -33,6 +33,7 @@ export default function Sidebar({
   const activeRef    = useRef(null);
   const activeCatRef = useRef(null);
   const isLive = mode === 'live';
+  const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
   const now = new Date();
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function Sidebar({
           <li className="channel-empty">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
         )}
         {shown.map((item) => {
-          const isFav    = favorites.includes(item.id);
+          const isFav    = favorites.includes(`${itemType}:${item.id}`);
           const isActive = activeItemId === item.id;
           const sub = isLive ? (currentTitle(epg, item, now) || item.group) : item.group;
           return (
@@ -108,13 +109,11 @@ export default function Sidebar({
                 <span className="channel-name">{item.name}</span>
                 {sub && <span className="channel-sub">{sub}</span>}
               </div>
-              {isLive && (
-                <button
-                  className={`fav-btn ${isFav ? 'fav-on' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); onToggleFavorite(item.id); }}
-                  title={isFav ? 'Aus Favoriten entfernen' : 'Favorit'}
-                >★</button>
-              )}
+              <button
+                className={`fav-btn ${isFav ? 'fav-on' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onToggleFavorite(itemType, item.id); }}
+                title={isFav ? 'Aus Favoriten entfernen' : 'Favorit'}
+              >★</button>
             </li>
           );
         })}

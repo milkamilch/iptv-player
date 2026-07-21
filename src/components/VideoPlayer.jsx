@@ -1,6 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import EPGBar from './EPGBar.jsx';
+import { getHistory, upsertHistory, removeHistory, markWatched, playableKey, HLS_BUFFER } from '../progress.js';
+
+// Build the "continue watching" card + rebuild info from the active playable.
+function cardFor(ch) {
+  if (ch.type === 'movie') {
+    return { kind: 'movie', id: ch.id, name: ch.name, logo: ch.logo, containerExt: ch.containerExt };
+  }
+  if (ch.type === 'episode') {
+    return {
+      kind: 'episode', episodeId: ch.id, name: ch.name, containerExt: ch.containerExt,
+      seriesId: ch.seriesId, seriesName: ch.seriesName, seriesLogo: ch.logo,
+      season: ch.season, episodeNum: ch.episodeNum,
+    };
+  }
+  return null;
+}
 
 // Save position every 5s, but only for non-live streams (duration > 0 and finite)
 const SAVE_INTERVAL_MS = 5000;
@@ -12,7 +28,7 @@ function isLiveStream(channel) {
   return channel?.stream_type === 'live' || channel?.url?.includes('/live/');
 }
 
-export default function VideoPlayer({ channel, epg, showEpg }) {
+export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
   const videoRef    = useRef(null);
   const hlsRef      = useRef(null);
   const saveTimerRef = useRef(null);
@@ -32,24 +48,22 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  // Save position to persistent store
-  function savePosition(channelId, seconds) {
-    if (!channelId || seconds < 5) return;
-    window.iptv.storeGet('playbackPositions').then((positions) => {
-      const next = { ...(positions || {}), [channelId]: Math.floor(seconds) };
-      window.iptv.storeSet('playbackPositions', next);
+  // Persist playback progress (position + "continue watching" card).
+  function savePosition(key, seconds, duration, card) {
+    if (!key || seconds < 5) return;
+    upsertHistory(key, {
+      position: Math.floor(seconds),
+      duration: isFinite(duration) ? Math.floor(duration) : 0,
+      updatedAt: Date.now(),
+      card,
     });
   }
 
-  // Clear saved position (stream finished or near end)
-  function clearPosition(channelId) {
-    if (!channelId) return;
-    window.iptv.storeGet('playbackPositions').then((positions) => {
-      if (!positions?.[channelId]) return;
-      const next = { ...positions };
-      delete next[channelId];
-      window.iptv.storeSet('playbackPositions', next);
-    });
+  // Stream finished / near end → drop from "continue" and mark watched.
+  function clearPosition(key) {
+    if (!key) return;
+    removeHistory(key);
+    markWatched(key);
   }
 
   useEffect(() => {
@@ -71,12 +85,13 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
     const live = isLiveStream(channel);
     // Namespaced by content type so a movie and an episode with the same
     // numeric id can't overwrite each other's resume position.
-    const posKey = `${channel.type || 'live'}:${channel.id}`;
+    const posKey = playableKey(channel.type || 'live', channel.id);
+    const card = cardFor(channel);
     setLoading(true);
 
     // Check for saved position (only for non-live)
     const tryResume = !live
-      ? window.iptv.storeGet('playbackPositions').then((positions) => positions?.[posKey] || 0)
+      ? getHistory().then((h) => h?.[posKey]?.position || 0)
       : Promise.resolve(0);
 
     function startPlayback(savedPos) {
@@ -99,7 +114,7 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
               if (nearEnd) {
                 clearPosition(posKey);
               } else {
-                savePosition(posKey, video.currentTime);
+                savePosition(posKey, video.currentTime, video.duration, card);
               }
             }
           }, SAVE_INTERVAL_MS);
@@ -107,7 +122,11 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
       }
 
       if (isHLS && Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: live });
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: live,
+          maxBufferLength: HLS_BUFFER[hlsBuffer] || HLS_BUFFER.normal,
+        });
         hlsRef.current = hls;
         hls.loadSource(url);
         hls.attachMedia(video);
@@ -137,7 +156,7 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
       clearInterval(saveTimerRef.current);
       if (!live && video.currentTime > 5 && isFinite(video.duration)) {
         const nearEnd = video.duration - video.currentTime < NEAR_END_THRESHOLD;
-        if (!nearEnd) savePosition(posKey, video.currentTime);
+        if (!nearEnd) savePosition(posKey, video.currentTime, video.duration, card);
         else clearPosition(posKey);
       }
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }

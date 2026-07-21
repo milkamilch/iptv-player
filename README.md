@@ -18,11 +18,17 @@ Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
 - **EPG / Programmführer**
   - Now/Next-Leiste für den laufenden Kanal (mit Fortschrittsbalken)
   - **TV-Guide** — volles Zeitraster aller Kanäle (Taste `g`)
-- **Favoriten** für Live-Kanäle
-- **Weiterschauen** — Wiedergabeposition wird für Filme/Serien gemerkt
-- **Mehrere Zugänge** — bis zu 5 gespeicherte Xtream-Accounts, Auto-Login
+  - gzip-EPG & Zeitzonen werden korrekt verarbeitet
+- **Favoriten** für Kanäle, Filme **und** Serien
+- **Weiterschauen** — „Weiter"-Reihe mit angefangenen Filmen/Serien; Serien merken
+  sich die zuletzt gesehene Episode (✓ für gesehen, Fortschrittsbalken)
+- **Tastatur-Steuerung** — `↑`/`↓` Kanalwechsel, Leertaste Play/Pause
+- **Einstellungen** — Start-Modus, Puffergröße, eigene EPG-URL, Verlauf löschen
+- **Auto-Updates** — neue Versionen werden automatisch aus den GitHub-Releases gezogen
+- **Mehrere Zugänge** — bis zu 5 gespeicherte Xtream-Accounts (Passwörter per
+  OS-Keyring verschlüsselt), Auto-Login
 - **M3U- & XMLTV-Import** — Playlist/EPG optional aus Datei oder URL laden
-- HLS-Streaming (`.m3u8`) sowie direkte VOD-Container (`mp4`/`mkv`)
+- HLS-Streaming (`.m3u8`, mit Reconnect) sowie direkte VOD-Container (`mp4`/`mkv`)
 
 ---
 
@@ -105,6 +111,8 @@ Hintergrund für die globale Suche).
 | Taste | Aktion |
 |---|---|
 | `g` | TV-Guide öffnen/schließen (im Live-Modus) |
+| `↑` / `↓` | vorheriger / nächster Kanal (Live) |
+| `Leertaste` | Play / Pause |
 | `Esc` | eine Ebene zurück (Guide → Suche → Detail) |
 
 ---

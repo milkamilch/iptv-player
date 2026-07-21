@@ -7,7 +7,9 @@ import MovieDetail from './components/MovieDetail.jsx';
 import SeriesDetail from './components/SeriesDetail.jsx';
 import SearchResults from './components/SearchResults.jsx';
 import Toolbar from './components/Toolbar.jsx';
+import Settings from './components/Settings.jsx';
 import { movieUrl, episodeUrl } from './xtream.js';
+import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
 import './App.css';
 
 export default function App() {
@@ -30,9 +32,15 @@ export default function App() {
   const [guideOpen, setGuideOpen]         = useState(false);
   const [loading, setLoading]             = useState(false);
   const [toast, setToast]                 = useState(null);
+  const [history, setHistory]             = useState({});      // watch history (continue watching)
+  const [settings, setSettings]           = useState(DEFAULT_SETTINGS);
+  const [settingsOpen, setSettingsOpen]   = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const loginNonceRef = useRef(0);
+  const navRef = useRef({});
 
   const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
+  const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
 
   // Load persisted data on startup
   useEffect(() => {
@@ -41,7 +49,13 @@ export default function App() {
       window.iptv.storeGet('favorites'),
       window.iptv.storeGet('activeAccount'),
     ]).then(async ([accs, favs, activeAcc]) => {
-      if (Array.isArray(favs)) setFavorites(favs);
+      const s = await getSettings();
+      setSettings(s);
+      setMode(s.defaultMode || 'live');
+      // Migrate legacy bare-id favorites to the typed "live:<id>" form.
+      if (Array.isArray(favs)) {
+        setFavorites(favs.map((f) => (typeof f === 'string' && f.includes(':') ? f : `live:${f}`)));
+      }
       if (Array.isArray(accs)) {
         const dec = await Promise.all(
           accs.map(async (a) => ({ ...a, password: await window.iptv.secureDecrypt(a.password) }))
@@ -65,7 +79,20 @@ export default function App() {
     });
   }, [channels]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keyboard: "g" toggles the TV-Guide (live only); "Esc" backs out one level.
+  // Debounce the global search so large lists aren't re-filtered on every keystroke.
+  useEffect(() => {
+    if (!globalQuery) { setDebouncedQuery(''); return; }
+    const t = setTimeout(() => setDebouncedQuery(globalQuery), 250);
+    return () => clearTimeout(t);
+  }, [globalQuery]);
+
+  // Keep watch history fresh across navigation (for the "Weiter" list).
+  useEffect(() => {
+    if (!account) return;
+    getHistory().then(setHistory);
+  }, [account, mode, activeGroup, activePlayable, detailItem]);
+
+  // Keyboard: g=Guide, Esc=back, Space=play/pause, ↑/↓=channel (live).
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') {
@@ -74,8 +101,25 @@ export default function App() {
         else if (detailItem) setDetailItem(null);
         return;
       }
-      const typing = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
-      if (e.key === 'g' && !typing && account && mode === 'live') setGuideOpen((v) => !v);
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if (e.key === 'g' && account && mode === 'live') { setGuideOpen((v) => !v); return; }
+
+      if (e.key === ' ') {
+        const v = document.querySelector('video.video-el');
+        if (v) { e.preventDefault(); v.paused ? v.play().catch(() => {}) : v.pause(); }
+        return;
+      }
+
+      const nav = navRef.current;
+      if (nav.mode === 'live' && !nav.blocked && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        const list = nav.visibleItems || [];
+        if (!list.length) return;
+        const idx = list.findIndex((c) => c.id === nav.activeId);
+        const nextIdx = idx < 0 ? 0 : (e.key === 'ArrowDown' ? idx + 1 : idx - 1);
+        selectChannel(list[Math.max(0, Math.min(list.length - 1, nextIdx))]);
+      }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -103,13 +147,32 @@ export default function App() {
   }
 
   function playMovie(movie) {
-    setActivePlayable({ id: movie.id, name: movie.name, url: movieUrl(account, movie), type: 'movie' });
+    setActivePlayable({
+      id: movie.id, name: movie.name, url: movieUrl(account, movie), type: 'movie',
+      logo: movie.logo, containerExt: movie.containerExt,
+    });
     setDetailItem(null);
   }
 
-  function playEpisode(ep) {
-    setActivePlayable({ id: ep.id, name: ep.name, url: episodeUrl(account, ep), type: 'episode' });
+  function playEpisode(ep, series) {
+    const s = series || detailItem?.item || null;
+    setActivePlayable({
+      id: ep.id, name: ep.name, url: episodeUrl(account, ep), type: 'episode',
+      logo: s?.logo || ep.seriesLogo, containerExt: ep.containerExt,
+      seriesId: s?.id || ep.seriesId, seriesName: s?.name || ep.seriesName,
+      season: ep.season, episodeNum: ep.episodeNum,
+    });
     setDetailItem(null);
+  }
+
+  // Resume a series from the "Weiter" list (its stored last episode).
+  function playContinueSeries(item) {
+    const c = item.__episode;
+    playEpisode({
+      id: c.episodeId, name: c.name, containerExt: c.containerExt,
+      season: c.season, episodeNum: c.episodeNum,
+      seriesId: c.seriesId, seriesName: c.seriesName, seriesLogo: c.seriesLogo,
+    });
   }
 
   function openDetail(type, item) {
@@ -148,8 +211,9 @@ export default function App() {
 
     const stillCurrent = () => loginNonceRef.current === loginId;
 
-    // Load EPG in background (non-blocking)
-    const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
+    // Load EPG in background (non-blocking) — honor a custom EPG URL from settings.
+    const s = await getSettings();
+    const epgUrl = s.epgUrl || `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
     window.iptv.loadXMLTVUrl(epgUrl)
       .then((data) => { if (stillCurrent()) setEpg(data); })
       .catch(() => {});
@@ -257,12 +321,27 @@ export default function App() {
     }
   }
 
-  function toggleFavorite(channelId) {
+  function toggleFavorite(type, id) {
+    const key = `${type}:${id}`;
     setFavorites((prev) => {
-      const next = prev.includes(channelId) ? prev.filter((id) => id !== channelId) : [...prev, channelId];
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
       window.iptv.storeSet('favorites', next);
       return next;
     });
+  }
+
+  function handleReload() {
+    if (account) handleLoginSuccess(account, false);
+  }
+
+  function handleSaveSettings(next) {
+    setSettings(next);
+    saveSettings(next);
+  }
+
+  function handleClearHistory() {
+    clearAllProgress();
+    setHistory({});
   }
 
   // ── Derived: current collection, categories, visible items ───────────────────
@@ -270,13 +349,36 @@ export default function App() {
 
   const groups = mode === 'live'
     ? ['Alle', 'Favoriten', ...new Set(channels.map((c) => c.group).filter(Boolean))]
-    : ['Alle', ...new Set(collection.map((c) => c.group).filter(Boolean))];
+    : ['Alle', 'Weiter', 'Favoriten', ...new Set(collection.map((c) => c.group).filter(Boolean))];
 
-  const visibleItems = collection.filter((c) => {
-    if (activeGroup === 'Favoriten') return favorites.includes(c.id);
-    if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
-    return true;
-  });
+  // "Weiter" (continue watching) list built from watch history.
+  function buildContinue() {
+    const entries = Object.values(history);
+    if (mode === 'movies') {
+      return entries.filter((e) => e.card?.kind === 'movie')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .map((e) => ({ id: e.card.id, name: e.card.name, logo: e.card.logo, group: 'Weiter', containerExt: e.card.containerExt }));
+    }
+    if (mode === 'series') {
+      const bySeries = {};
+      for (const e of entries) {
+        if (e.card?.kind !== 'episode') continue;
+        const sid = e.card.seriesId;
+        if (!bySeries[sid] || e.updatedAt > bySeries[sid].updatedAt) bySeries[sid] = e;
+      }
+      return Object.values(bySeries).sort((a, b) => b.updatedAt - a.updatedAt)
+        .map((e) => ({ id: e.card.seriesId, name: e.card.seriesName, logo: e.card.seriesLogo, group: 'Weiter', __episode: e.card }));
+    }
+    return [];
+  }
+
+  const visibleItems = (activeGroup === 'Weiter' && mode !== 'live')
+    ? buildContinue()
+    : collection.filter((c) => {
+        if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
+        if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
+        return true;
+      });
 
   const activeItemId = detailItem ? detailItem.item.id
     : mode === 'live' ? activeLiveChannel?.id
@@ -296,16 +398,24 @@ export default function App() {
     );
   }
 
-  const searching = globalQuery.trim().length > 0;
+  const searching = debouncedQuery.trim().length > 0;
   const epgReady = Object.keys(epg).length > 0;
   const host = (() => { try { return new URL(account.baseUrl).hostname; } catch { return account.baseUrl; } })();
+
+  // Snapshot for the keyboard handler (avoids re-subscribing on every render).
+  navRef.current = {
+    mode,
+    visibleItems,
+    activeId: activeLiveChannel?.id,
+    blocked: searching || !!detailItem || guideOpen,
+  };
 
   return (
     <div className="app">
       <main className="app-main">
         {searching ? (
           <SearchResults
-            query={globalQuery}
+            query={debouncedQuery}
             live={channels}
             movies={movies}
             series={series}
@@ -319,6 +429,8 @@ export default function App() {
             account={account}
             onPlay={playMovie}
             onBack={() => setDetailItem(null)}
+            isFav={favorites.includes(`movie:${detailItem.item.id}`)}
+            onToggleFav={() => toggleFavorite('movie', detailItem.item.id)}
           />
         ) : detailItem?.type === 'series' ? (
           <SeriesDetail
@@ -327,9 +439,11 @@ export default function App() {
             activeEpisodeId={activePlayable?.type === 'episode' ? activePlayable.id : null}
             onPlayEpisode={playEpisode}
             onBack={() => setDetailItem(null)}
+            isFav={favorites.includes(`series:${detailItem.item.id}`)}
+            onToggleFav={() => toggleFavorite('series', detailItem.item.id)}
           />
         ) : (
-          <VideoPlayer channel={activePlayable} epg={epg} showEpg={epgBarOpen} />
+          <VideoPlayer channel={activePlayable} epg={epg} showEpg={epgBarOpen} hlsBuffer={settings.hlsBuffer} />
         )}
       </main>
 
@@ -340,10 +454,12 @@ export default function App() {
         onLoadUrl={handleLoadM3UUrl}
         onOpenEPG={handleOpenEPG}
         onLoadEPGUrl={handleLoadEPGUrl}
+        onReload={handleReload}
         epgBarOpen={epgBarOpen}
         onToggleEPG={() => setEpgBarOpen((v) => !v)}
         guideOpen={guideOpen}
         onToggleGuide={() => setGuideOpen((v) => !v)}
+        onOpenSettings={() => setSettingsOpen(true)}
         loading={loading}
       />
 
@@ -366,8 +482,13 @@ export default function App() {
         onGroupChange={setActiveGroup}
         activeItemId={activeItemId}
         onItemSelect={(item) => {
-          if (mode === 'live') selectChannel(item);
-          else openDetail(mode === 'movies' ? 'movie' : 'series', item);
+          if (mode === 'live') { selectChannel(item); return; }
+          if (activeGroup === 'Weiter') {
+            if (mode === 'movies') playMovie(item);
+            else playContinueSeries(item);
+            return;
+          }
+          openDetail(mode === 'movies' ? 'movie' : 'series', item);
         }}
         favorites={favorites}
         onToggleFavorite={toggleFavorite}
@@ -386,6 +507,15 @@ export default function App() {
           activeChannel={activeLiveChannel}
           onSelect={selectChannel}
           onClose={() => setGuideOpen(false)}
+        />
+      )}
+
+      {settingsOpen && (
+        <Settings
+          settings={settings}
+          onSave={handleSaveSettings}
+          onClearHistory={handleClearHistory}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
 
