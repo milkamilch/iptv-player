@@ -23,6 +23,14 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [resumePos, setResumePos]   = useState(null); // seconds to resume from
   const [showResume, setShowResume] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);   // bump to reload the stream
+
+  // Keep fullscreen state in sync even when the user leaves via Esc.
+  useEffect(() => {
+    const onFsChange = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
 
   // Save position to persistent store
   function savePosition(channelId, seconds) {
@@ -61,15 +69,19 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
 
     const url  = channel.url;
     const live = isLiveStream(channel);
+    // Namespaced by content type so a movie and an episode with the same
+    // numeric id can't overwrite each other's resume position.
+    const posKey = `${channel.type || 'live'}:${channel.id}`;
     setLoading(true);
 
     // Check for saved position (only for non-live)
     const tryResume = !live
-      ? window.iptv.storeGet('playbackPositions').then((positions) => positions?.[channel.id] || 0)
+      ? window.iptv.storeGet('playbackPositions').then((positions) => positions?.[posKey] || 0)
       : Promise.resolve(0);
 
     function startPlayback(savedPos) {
       const isHLS = url.includes('.m3u8') || url.includes('m3u8');
+      let recoveries = 0;
 
       function onReady() {
         setLoading(false);
@@ -85,9 +97,9 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
             if (!video.paused && video.currentTime > 5 && isFinite(video.duration)) {
               const nearEnd = video.duration - video.currentTime < NEAR_END_THRESHOLD;
               if (nearEnd) {
-                clearPosition(channel.id);
+                clearPosition(posKey);
               } else {
-                savePosition(channel.id, video.currentTime);
+                savePosition(posKey, video.currentTime);
               }
             }
           }, SAVE_INTERVAL_MS);
@@ -101,7 +113,15 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, onReady);
         hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (data.fatal) { setLoading(false); setError(`Stream-Fehler: ${data.type}`); }
+          if (!data.fatal) return;
+          // Try to recover transient network/media errors before giving up.
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && recoveries < 4) {
+            recoveries++; hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && recoveries < 4) {
+            recoveries++; hls.recoverMediaError();
+          } else {
+            setLoading(false); setError(`Stream-Fehler: ${data.type}`);
+          }
         });
       } else {
         video.src = url;
@@ -117,13 +137,13 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
       clearInterval(saveTimerRef.current);
       if (!live && video.currentTime > 5 && isFinite(video.duration)) {
         const nearEnd = video.duration - video.currentTime < NEAR_END_THRESHOLD;
-        if (!nearEnd) savePosition(channel.id, video.currentTime);
-        else clearPosition(channel.id);
+        if (!nearEnd) savePosition(posKey, video.currentTime);
+        else clearPosition(posKey);
       }
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
       video.src = '';
     };
-  }, [channel]);
+  }, [channel, retryNonce]);
 
   function handleResume() {
     const video = videoRef.current;
@@ -202,7 +222,7 @@ export default function VideoPlayer({ channel, epg, showEpg }) {
       {error && (
         <div className="video-overlay video-error">
           <span>⚠ {error}</span>
-          <button onClick={() => { setError(null); }}>Neu versuchen</button>
+          <button onClick={() => { setError(null); setRetryNonce((n) => n + 1); }}>Neu versuchen</button>
         </div>
       )}
 

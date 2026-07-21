@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import LoginModal from './components/LoginModal.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
@@ -30,6 +30,7 @@ export default function App() {
   const [guideOpen, setGuideOpen]         = useState(false);
   const [loading, setLoading]             = useState(false);
   const [toast, setToast]                 = useState(null);
+  const loginNonceRef = useRef(0);
 
   const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
 
@@ -39,10 +40,18 @@ export default function App() {
       window.iptv.storeGet('savedAccounts'),
       window.iptv.storeGet('favorites'),
       window.iptv.storeGet('activeAccount'),
-    ]).then(([accs, favs, activeAcc]) => {
-      if (Array.isArray(accs))  setSavedAccounts(accs);
-      if (Array.isArray(favs))  setFavorites(favs);
-      if (activeAcc)            handleLoginSuccess(activeAcc, false);
+    ]).then(async ([accs, favs, activeAcc]) => {
+      if (Array.isArray(favs)) setFavorites(favs);
+      if (Array.isArray(accs)) {
+        const dec = await Promise.all(
+          accs.map(async (a) => ({ ...a, password: await window.iptv.secureDecrypt(a.password) }))
+        );
+        setSavedAccounts(dec);
+      }
+      if (activeAcc) {
+        const password = await window.iptv.secureDecrypt(activeAcc.password);
+        handleLoginSuccess({ ...activeAcc, password }, false);
+      }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -89,6 +98,7 @@ export default function App() {
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
+    setGlobalQuery('');
     window.iptv.storeSet('lastChannel', { id: ch.id, name: ch.name });
   }
 
@@ -116,60 +126,69 @@ export default function App() {
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   async function handleLoginSuccess(acc, save = true) {
+    const loginId = ++loginNonceRef.current;
     setAccount(acc);
     setLoading(true);
+    // Clear the previous account's content so stale data can't linger.
+    setMovies([]); setSeries([]); setEpg({});
+    setActivePlayable(null); setDetailItem(null); setGlobalQuery('');
 
     try {
       // Use Xtream Codes JSON API — works even when M3U endpoint is blocked
       const chs = await window.iptv.loadXtreamChannels(acc.baseUrl, acc.username, acc.password);
+      if (loginNonceRef.current !== loginId) return; // superseded by a newer login
       setChannels(chs);
       setActiveGroup('Alle');
       showToast(`${chs.length} Kanäle geladen`, 'success');
     } catch (e) {
-      showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
+      if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
     }
 
     setLoading(false);
 
+    const stillCurrent = () => loginNonceRef.current === loginId;
+
     // Load EPG in background (non-blocking)
     const epgUrl = `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
     window.iptv.loadXMLTVUrl(epgUrl)
-      .then((data) => setEpg(data))
+      .then((data) => { if (stillCurrent()) setEpg(data); })
       .catch(() => {});
 
     // Load VOD + series in background (needed for the global search)
     setMoviesLoading(true);
     window.iptv.loadXtreamVod(acc.baseUrl, acc.username, acc.password)
-      .then((m) => setMovies(Array.isArray(m) ? m : []))
+      .then((m) => { if (stillCurrent()) setMovies(Array.isArray(m) ? m : []); })
       .catch(() => {})
-      .finally(() => setMoviesLoading(false));
+      .finally(() => { if (stillCurrent()) setMoviesLoading(false); });
 
     setSeriesLoading(true);
     window.iptv.loadXtreamSeries(acc.baseUrl, acc.username, acc.password)
-      .then((s) => setSeries(Array.isArray(s) ? s : []))
+      .then((s) => { if (stillCurrent()) setSeries(Array.isArray(s) ? s : []); })
       .catch(() => {})
-      .finally(() => setSeriesLoading(false));
+      .finally(() => { if (stillCurrent()) setSeriesLoading(false); });
 
     if (save) {
       const accToStore = { baseUrl: acc.baseUrl, username: acc.username, password: acc.password };
-      setSavedAccounts((prev) => {
-        const filtered = prev.filter(
-          (a) => !(a.baseUrl === accToStore.baseUrl && a.username === accToStore.username)
-        );
-        const next = [accToStore, ...filtered].slice(0, 5); // max 5 saved accounts
-        window.iptv.storeSet('savedAccounts', next);
-        return next;
-      });
-      window.iptv.storeSet('activeAccount', accToStore);
+      const filtered = savedAccounts.filter(
+        (a) => !(a.baseUrl === accToStore.baseUrl && a.username === accToStore.username)
+      );
+      const next = [accToStore, ...filtered].slice(0, 5); // max 5 saved accounts
+      setSavedAccounts(next);
+      // Persist with passwords encrypted via the OS keyring.
+      const encList = await Promise.all(
+        next.map(async (a) => ({ ...a, password: await window.iptv.secureEncrypt(a.password) }))
+      );
+      window.iptv.storeSet('savedAccounts', encList);
+      window.iptv.storeSet('activeAccount', { ...accToStore, password: await window.iptv.secureEncrypt(accToStore.password) });
     }
   }
 
   function handleDeleteAccount(index) {
-    setSavedAccounts((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      window.iptv.storeSet('savedAccounts', next);
-      return next;
-    });
+    const next = savedAccounts.filter((_, i) => i !== index);
+    setSavedAccounts(next);
+    Promise.all(
+      next.map(async (a) => ({ ...a, password: await window.iptv.secureEncrypt(a.password) }))
+    ).then((enc) => window.iptv.storeSet('savedAccounts', enc));
   }
 
   function handleLogout() {
@@ -357,6 +376,7 @@ export default function App() {
         totalCount={collection.length}
         epgReady={epgReady}
         epg={epg}
+        listLoading={mode === 'movies' ? moviesLoading : mode === 'series' ? seriesLoading : false}
       />
 
       {guideOpen && mode === 'live' && (

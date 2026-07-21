@@ -28,7 +28,7 @@ export default function Sidebar({
   activeItemId, onItemSelect,
   favorites, onToggleFavorite,
   globalQuery, onGlobalSearch,
-  totalCount, epgReady, epg,
+  totalCount, epgReady, epg, listLoading,
 }) {
   const activeRef    = useRef(null);
   const activeCatRef = useRef(null);
@@ -79,7 +79,9 @@ export default function Sidebar({
       </div>
 
       <ul className="channel-list">
-        {items.length === 0 && <li className="channel-empty">Keine Einträge</li>}
+        {items.length === 0 && (
+          <li className="channel-empty">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
+        )}
         {shown.map((item) => {
           const isFav    = favorites.includes(item.id);
           const isActive = activeItemId === item.id;

@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('iptv', {
   storeGet:         (key)       => ipcRenderer.invoke('store-get', key),
   storeSet:         (key, val)  => ipcRenderer.invoke('store-set', key, val),
   storeDelete:      (key)       => ipcRenderer.invoke('store-delete', key),
+  secureEncrypt:    (plain)     => ipcRenderer.invoke('secure-encrypt', plain),
+  secureDecrypt:    (value)     => ipcRenderer.invoke('secure-decrypt', value),
   parseXMLTVDate:   (str)       => ipcRenderer.invoke('parse-xmltv-date', str),
   openExternal:     (url)       => ipcRenderer.invoke('open-external', url),
 });

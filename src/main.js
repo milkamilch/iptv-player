@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
+import zlib from 'node:zlib';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import path from 'node:path';
@@ -62,15 +63,26 @@ function parseXMLTV(text) {
     const channelId = channelMatch[1];
     if (!programmes[channelId]) programmes[channelId] = [];
 
+    // Keep the timezone offset (group 2) so the renderer can resolve real time.
+    const startVal = startMatch[1] + (startMatch[2] ? ' ' + startMatch[2] : '');
+    const stopVal  = stopMatch ? stopMatch[1] + (stopMatch[2] ? ' ' + stopMatch[2] : '') : null;
+
     programmes[channelId].push({
-      start:    startMatch[1],
-      stop:     stopMatch ? stopMatch[1] : null,
+      start:    startVal,
+      stop:     stopVal,
       title:    titleMatch ? titleMatch[1] : 'Unbekannt',
       desc:     descMatch  ? descMatch[1]  : '',
       category: catMatch   ? catMatch[1]   : '',
     });
   }
   return programmes;
+}
+
+// Decode an XMLTV payload buffer to text, transparently gunzipping if the body
+// is gzip-compressed (many providers serve xmltv.php / .xml.gz that way).
+function decodeXmltv(buf, contentEncoding = '') {
+  const isGzip = contentEncoding.includes('gzip') || (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b);
+  return (isGzip ? zlib.gunzipSync(buf) : buf).toString('utf-8');
 }
 
 function parseXMLTVDate(str) {
@@ -145,18 +157,23 @@ ipcMain.handle('open-xmltv-file', async () => {
     properties: ['openFile'],
   });
   if (result.canceled || !result.filePaths.length) return null;
-  let text = fs.readFileSync(result.filePaths[0], 'utf-8');
-  return parseXMLTV(text);
+  const buf = fs.readFileSync(result.filePaths[0]);
+  return parseXMLTV(decodeXmltv(buf));
 });
 
 ipcMain.handle('load-xmltv-url', async (_event, url) => {
   const { net } = await import('electron');
   return new Promise((resolve, reject) => {
     const req = net.request(url);
-    let data = '';
+    const chunks = [];
     req.on('response', (res) => {
-      res.on('data', (chunk) => { data += chunk.toString(); });
-      res.on('end', () => resolve(parseXMLTV(data)));
+      res.on('data', (chunk) => { chunks.push(Buffer.from(chunk)); });
+      res.on('end', () => {
+        try {
+          const enc = (res.headers['content-encoding'] || '').toString();
+          resolve(parseXMLTV(decodeXmltv(Buffer.concat(chunks), enc)));
+        } catch (e) { reject(e); }
+      });
       res.on('error', reject);
     });
     req.on('error', reject);
@@ -325,6 +342,21 @@ ipcMain.handle('load-xtream-series-info', async (_event, baseUrl, username, pass
 ipcMain.handle('store-get', (_event, key) => store.get(key));
 ipcMain.handle('store-set', (_event, key, value) => { store.set(key, value); });
 ipcMain.handle('store-delete', (_event, key) => { store.delete(key); });
+
+// OS-backed secret encryption for stored passwords. Falls back to plaintext
+// when the platform has no keyring (encryption unavailable).
+ipcMain.handle('secure-encrypt', (_event, plain) => {
+  if (!plain || !safeStorage.isEncryptionAvailable()) return plain;
+  return 'enc:' + safeStorage.encryptString(plain).toString('base64');
+});
+ipcMain.handle('secure-decrypt', (_event, value) => {
+  if (typeof value !== 'string' || !value.startsWith('enc:')) return value;
+  try {
+    return safeStorage.decryptString(Buffer.from(value.slice(4), 'base64'));
+  } catch {
+    return '';
+  }
+});
 
 ipcMain.handle('parse-xmltv-date', (_event, str) => {
   const d = parseXMLTVDate(str);

@@ -3,14 +3,20 @@
 /** Parse an XMLTV date string ("YYYYMMDDHHMMSS +ZZZZ") into a Date. */
 export function parseXMLTVDate(str) {
   if (!str || str.length < 14) return null;
-  return new Date(
-    parseInt(str.slice(0, 4)),
-    parseInt(str.slice(4, 6)) - 1,
-    parseInt(str.slice(6, 8)),
-    parseInt(str.slice(8, 10)),
-    parseInt(str.slice(10, 12)),
-    parseInt(str.slice(12, 14))
-  );
+  const Y = parseInt(str.slice(0, 4));
+  const Mo = parseInt(str.slice(4, 6)) - 1;
+  const D = parseInt(str.slice(6, 8));
+  const H = parseInt(str.slice(8, 10));
+  const Mi = parseInt(str.slice(10, 12));
+  const S = parseInt(str.slice(12, 14));
+
+  // Honor an explicit timezone offset ("+0200"), else fall back to local time.
+  const tz = str.slice(14).trim().match(/^([+-])(\d{2})(\d{2})$/);
+  if (tz) {
+    const offMin = (tz[1] === '+' ? 1 : -1) * (parseInt(tz[2]) * 60 + parseInt(tz[3]));
+    return new Date(Date.UTC(Y, Mo, D, H, Mi, S) - offMin * 60000);
+  }
+  return new Date(Y, Mo, D, H, Mi, S);
 }
 
 /**
