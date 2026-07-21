@@ -6,7 +6,7 @@ module.exports = {
     asar: true,
     name: 'iptv-player',
     executableName: 'iptv-player',
-    appVersion: '1.0.0',
+    appVersion: '1.1.0',
     icon: './assets/icon',
   },
   rebuildConfig: {},
