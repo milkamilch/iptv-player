@@ -5,6 +5,7 @@ const PPM = 6;                 // pixels per minute (30 min = 180px)
 const LABEL_W = 180;           // channel column width
 const SLOT_MIN = 30;           // time-axis grid step (minutes)
 const MAX_HOURS = 24;          // cap the visible window so the track stays sane
+const ROW_CAP = 300;           // never build a row per channel for huge playlists
 
 function floorToHalfHour(d) {
   const r = new Date(d);
@@ -25,14 +26,21 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
     return () => clearInterval(t);
   }, []);
 
-  // Resolve programmes per channel once per channels/epg change.
+  // Resolve programmes per channel once per channels/epg change. Capped: with a
+  // full playlist this would otherwise build thousands of rows and freeze the UI.
   const rows = useMemo(
-    () => channels.map((ch) => ({ ch, progs: matchProgrammes(epg, ch) })),
+    () => channels.slice(0, ROW_CAP).map((ch) => ({ ch, progs: matchProgrammes(epg, ch) })),
     [channels, epg]
   );
+  const hiddenRows = channels.length - rows.length;
 
   // Window: floor(now) → latest stop across channels, capped, min 6h.
-  const windowStart = useMemo(() => floorToHalfHour(now), [now]);
+  // Kept identity-stable across clock ticks, otherwise every 30s tick would
+  // invalidate windowEnd/slots and re-render the whole grid.
+  const windowStartRef = useRef(floorToHalfHour(now));
+  const flooredNow = floorToHalfHour(now);
+  if (+flooredNow !== +windowStartRef.current) windowStartRef.current = flooredNow;
+  const windowStart = windowStartRef.current;
   const windowEnd = useMemo(() => {
     let max = 0;
     for (const { progs } of rows) {
@@ -78,7 +86,9 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
       <div className="epg-grid-panel">
       <div className="epg-grid-bar">
         <span className="epg-grid-title">TV-Guide</span>
-        <span className="epg-grid-sub">{rows.length} Kanäle · heute</span>
+        <span className="epg-grid-sub">
+          {hiddenRows > 0 ? `${rows.length} von ${channels.length} Kanälen` : `${rows.length} Kanäle`} · heute
+        </span>
         <div className="epg-grid-bar-spacer" />
         <button className="guide-now-btn" onClick={scrollToNow} title="Zur aktuellen Zeit">Jetzt</button>
         <button className="guide-close" onClick={onClose} title="Schließen (Esc)">✕</button>
@@ -140,6 +150,12 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
               </div>
             </div>
           ))}
+
+          {hiddenRows > 0 && (
+            <div className="epg-grid-more">
+              + {hiddenRows.toLocaleString('de-DE')} weitere Kanäle — Kategorie wählen, um sie im Guide zu sehen
+            </div>
+          )}
         </div>
       </div>
       </div>

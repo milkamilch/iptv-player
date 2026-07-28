@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const MODES = [
   { key: 'live',   label: 'Live' },
@@ -17,8 +17,24 @@ export default function Toolbar({
   const [menuOpen, setMenuOpen]       = useState(false);
   const [urlBox, setUrlBox]           = useState(null); // 'm3u' | 'epg' | null
   const [urlInput, setUrlInput]       = useState('');
+  const sourceRef = useRef(null);
 
   const isLive = mode === 'live';
+
+  // Close the source menu on an outside click or Esc — without this it stays
+  // open on top of the UI until the ＋ button is hit again.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function close() { setMenuOpen(false); setUrlBox(null); }
+    function onPointerDown(e) { if (!sourceRef.current?.contains(e.target)) close(); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [menuOpen]);
 
   function submitUrl() {
     const v = urlInput.trim();
@@ -65,7 +81,7 @@ export default function Toolbar({
 
       <button className="tb-pill tb-icon-pill" onClick={onOpenSettings} title="Einstellungen">⚙</button>
 
-      <div className="tb-source">
+      <div className="tb-source" ref={sourceRef}>
         <button
           className={`tb-pill tb-icon-pill ${menuOpen ? 'active' : ''}`}
           onClick={() => { setMenuOpen((v) => !v); setUrlBox(null); }}

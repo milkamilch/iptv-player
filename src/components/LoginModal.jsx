@@ -7,7 +7,11 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
-  const [tab, setTab]           = useState(savedAccounts.length > 0 ? 'saved' : 'new');
+  // Default to the saved list: savedAccounts is loaded asynchronously and is
+  // still empty on first render, so deriving the initial tab from it would
+  // permanently strand users with saved accounts on the empty form. The render
+  // below falls back to the form on its own while the list is empty.
+  const [tab, setTab]           = useState('saved');
 
   function normalizeUrl(raw) {
     let u = raw.trim().replace(/\/+$/, '');

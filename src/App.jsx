@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import LoginModal from './components/LoginModal.jsx';
-import Sidebar from './components/Sidebar.jsx';
+import Sidebar, { RENDER_CAP } from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
 import EPGGrid from './components/EPGGrid.jsx';
 import MovieDetail from './components/MovieDetail.jsx';
@@ -38,6 +38,7 @@ export default function App() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const loginNonceRef = useRef(0);
   const navRef = useRef({});
+  const toastTimerRef = useRef(null);
 
   const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
@@ -69,15 +70,17 @@ export default function App() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore last channel once channels are loaded (if nothing playing yet)
+  // Restore last channel once channels are loaded (if nothing playing yet).
+  // Only in live mode — otherwise a "Filme"/"Serien" start mode would still
+  // fire up live TV in the background.
   useEffect(() => {
-    if (!channels.length || activePlayable) return;
+    if (!channels.length || activePlayable || mode !== 'live') return;
     window.iptv.storeGet('lastChannel').then((saved) => {
       if (!saved) return;
       const ch = channels.find((c) => c.id === saved.id);
       if (ch) setActivePlayable({ ...ch, type: 'live' });
     });
-  }, [channels]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [channels, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounce the global search so large lists aren't re-filtered on every keystroke.
   useEffect(() => {
@@ -96,11 +99,14 @@ export default function App() {
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') {
-        if (guideOpen) setGuideOpen(false);
+        if (settingsOpen) setSettingsOpen(false);
+        else if (guideOpen) setGuideOpen(false);
         else if (globalQuery) setGlobalQuery('');
         else if (detailItem) setDetailItem(null);
         return;
       }
+      // The settings modal is modal — don't let shortcuts act on what's behind it.
+      if (settingsOpen) return;
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
       if (e.key === 'g' && account && mode === 'live') { setGuideOpen((v) => !v); return; }
@@ -123,11 +129,13 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [account, mode, guideOpen, globalQuery, detailItem]);
+  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen]);
 
   function showToast(msg, type = 'info') {
+    // Drop the pending hide timer, else an older toast's timeout cuts this one short.
+    clearTimeout(toastTimerRef.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -188,6 +196,11 @@ export default function App() {
   }
 
   // ── Loading ─────────────────────────────────────────────────────────────────
+  // The provider's own XMLTV endpoint — used whenever no custom EPG URL is set.
+  function providerEpgUrl(acc) {
+    return `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
+  }
+
   async function handleLoginSuccess(acc, save = true) {
     const loginId = ++loginNonceRef.current;
     setAccount(acc);
@@ -213,8 +226,7 @@ export default function App() {
 
     // Load EPG in background (non-blocking) — honor a custom EPG URL from settings.
     const s = await getSettings();
-    const epgUrl = s.epgUrl || `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
-    window.iptv.loadXMLTVUrl(epgUrl)
+    window.iptv.loadXMLTVUrl(s.epgUrl || providerEpgUrl(acc))
       .then((data) => { if (stillCurrent()) setEpg(data); })
       .catch(() => {});
 
@@ -335,8 +347,11 @@ export default function App() {
   }
 
   function handleSaveSettings(next) {
+    const epgChanged = next.epgUrl !== settings.epgUrl;
     setSettings(next);
     saveSettings(next);
+    // Apply a changed EPG source right away instead of waiting for the next login.
+    if (epgChanged && account) handleLoadEPGUrl(next.epgUrl || providerEpgUrl(account));
   }
 
   function handleClearHistory() {
@@ -347,9 +362,13 @@ export default function App() {
   // ── Derived: current collection, categories, visible items ───────────────────
   const collection = mode === 'live' ? channels : mode === 'movies' ? movies : series;
 
-  const groups = mode === 'live'
-    ? ['Alle', 'Favoriten', ...new Set(channels.map((c) => c.group).filter(Boolean))]
-    : ['Alle', 'Weiter', 'Favoriten', ...new Set(collection.map((c) => c.group).filter(Boolean))];
+  // Providers hand out categories literally called "Alle" (that's also our
+  // fallback for uncategorised streams), so the built-in chips have to be
+  // deduplicated against the category names — otherwise React sees duplicate keys.
+  const groups = useMemo(() => {
+    const fixed = mode === 'live' ? ['Alle', 'Favoriten'] : ['Alle', 'Weiter', 'Favoriten'];
+    return [...new Set([...fixed, ...collection.map((c) => c.group).filter(Boolean)])];
+  }, [mode, collection]);
 
   // "Weiter" (continue watching) list built from watch history.
   function buildContinue() {
@@ -372,17 +391,24 @@ export default function App() {
     return [];
   }
 
-  const visibleItems = (activeGroup === 'Weiter' && mode !== 'live')
-    ? buildContinue()
-    : collection.filter((c) => {
-        if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
-        if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
-        return true;
-      });
+  // Memoised so the list keeps its identity across unrelated renders (typing in
+  // the search box, clock ticks) — the sidebar memoises its EPG lookups on it.
+  const visibleItems = useMemo(() => (
+    (activeGroup === 'Weiter' && mode !== 'live')
+      ? buildContinue()
+      : collection.filter((c) => {
+          if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
+          if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
+          return true;
+        })
+  ), [activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Highlight whatever the list is currently showing for the active playable —
+  // for series that's the parent series of the running episode.
   const activeItemId = detailItem ? detailItem.item.id
-    : mode === 'live' ? activeLiveChannel?.id
-    : null;
+    : mode === 'live'   ? activeLiveChannel?.id
+    : mode === 'movies' ? (activePlayable?.type === 'movie' ? activePlayable.id : null)
+    : (activePlayable?.type === 'episode' ? activePlayable.seriesId : null);
 
   if (!account) {
     return (
@@ -405,14 +431,20 @@ export default function App() {
   // Snapshot for the keyboard handler (avoids re-subscribing on every render).
   navRef.current = {
     mode,
-    visibleItems,
+    // Only the rows the sidebar actually renders — stepping past RENDER_CAP
+    // would switch to channels that aren't in the DOM (no highlight, no scroll).
+    visibleItems: visibleItems.slice(0, RENDER_CAP),
     activeId: activeLiveChannel?.id,
-    blocked: searching || !!detailItem || guideOpen,
+    blocked: searching || !!detailItem || guideOpen || settingsOpen,
   };
 
   return (
     <div className="app">
       <main className="app-main">
+        {/* The player stays mounted and keeps playing — search and detail pages
+            are laid over it instead of replacing it. */}
+        <VideoPlayer channel={activePlayable} epg={epg} showEpg={epgBarOpen} hlsBuffer={settings.hlsBuffer} />
+
         {searching ? (
           <SearchResults
             query={debouncedQuery}
@@ -442,9 +474,7 @@ export default function App() {
             isFav={favorites.includes(`series:${detailItem.item.id}`)}
             onToggleFav={() => toggleFavorite('series', detailItem.item.id)}
           />
-        ) : (
-          <VideoPlayer channel={activePlayable} epg={epg} showEpg={epgBarOpen} hlsBuffer={settings.hlsBuffer} />
-        )}
+        ) : null}
       </main>
 
       <Toolbar

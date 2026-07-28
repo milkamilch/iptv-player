@@ -1,10 +1,13 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { parseXMLTVDate } from '../epg.js';
 
-const RENDER_CAP = 300; // avoid rendering tens of thousands of VOD rows at once
+// Avoid rendering tens of thousands of VOD rows at once. Exported so the
+// keyboard navigation in App can stay in sync with what is actually visible.
+export const RENDER_CAP = 300;
 
 // Two-letter fallback badge from a name, e.g. "Sky Sport" → "SS".
 function initials(name) {
+  if (!name) return '?';
   const parts = name.replace(/\bHD\b|\bUHD\b|\b4K\b/gi, '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -34,7 +37,15 @@ export default function Sidebar({
   const activeCatRef = useRef(null);
   const isLive = mode === 'live';
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
-  const now = new Date();
+  const [now, setNow] = useState(() => new Date());
+  const [brokenLogos, setBrokenLogos] = useState(() => new Set());
+
+  // Own clock so the "running now" titles stay current without needing an
+  // unrelated re-render of App to refresh them.
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'nearest' });
@@ -44,8 +55,21 @@ export default function Sidebar({
     activeCatRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeGroup]);
 
-  const shown = items.slice(0, RENDER_CAP);
+  const shown = useMemo(() => items.slice(0, RENDER_CAP), [items]);
   const hidden = items.length - shown.length;
+
+  // Resolve the current programme per visible row once — this scans the EPG for
+  // up to RENDER_CAP channels and must not run on every unrelated render.
+  const subtitles = useMemo(() => {
+    if (!isLive) return {};
+    const out = {};
+    for (const it of shown) out[it.id] = currentTitle(epg, it, now);
+    return out;
+  }, [isLive, shown, epg, now]);
+
+  function markLogoBroken(key) {
+    setBrokenLogos((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+  }
 
   return (
     <aside className="sidebar">
@@ -84,9 +108,10 @@ export default function Sidebar({
           <li className="channel-empty">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
         )}
         {shown.map((item) => {
-          const isFav    = favorites.includes(`${itemType}:${item.id}`);
+          const key      = `${itemType}:${item.id}`;
+          const isFav    = favorites.includes(key);
           const isActive = activeItemId === item.id;
-          const sub = isLive ? (currentTitle(epg, item, now) || item.group) : item.group;
+          const sub = isLive ? (subtitles[item.id] || item.group) : item.group;
           return (
             <li
               key={item.id}
@@ -95,12 +120,14 @@ export default function Sidebar({
               onClick={() => onItemSelect(item)}
             >
               {isActive && <span className="channel-bar" />}
-              {item.logo ? (
+              {item.logo && !brokenLogos.has(key) ? (
                 <img
                   className="channel-logo"
                   src={item.logo}
                   alt=""
-                  onError={(e) => { e.target.style.visibility = 'hidden'; }}
+                  // Fall back to the initials badge — hiding the img would just
+                  // leave an empty gap where the logo should be.
+                  onError={() => markLogoBroken(key)}
                 />
               ) : (
                 <div className="channel-logo channel-logo-ph">{initials(item.name)}</div>

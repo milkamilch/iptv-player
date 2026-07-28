@@ -32,6 +32,7 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
   const videoRef    = useRef(null);
   const hlsRef      = useRef(null);
   const saveTimerRef = useRef(null);
+  const posKeyRef   = useRef(null);   // history key of the stream currently loaded
   const [error, setError]         = useState(null);
   const [loading, setLoading]     = useState(false);
   const [muted, setMuted]         = useState(false);
@@ -86,6 +87,7 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
     // Namespaced by content type so a movie and an episode with the same
     // numeric id can't overwrite each other's resume position.
     const posKey = playableKey(channel.type || 'live', channel.id);
+    posKeyRef.current = posKey;
     const card = cardFor(channel);
     setLoading(true);
 
@@ -162,7 +164,9 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
       video.src = '';
     };
-  }, [channel, retryNonce]);
+    // hlsBuffer is a dependency: the buffer length is baked into the Hls config,
+    // so the stream has to be rebuilt for a changed setting to take effect.
+  }, [channel, retryNonce, hlsBuffer]);
 
   function handleResume() {
     const video = videoRef.current;
@@ -177,7 +181,8 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
     if (!video) return;
     video.currentTime = 0;
     video.play().catch(() => {});
-    clearPosition(channel.id);
+    // Must use the namespaced key the effect stored — a bare id clears nothing.
+    clearPosition(posKeyRef.current);
     setShowResume(false);
   }
 
