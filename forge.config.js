@@ -6,7 +6,8 @@ module.exports = {
     asar: true,
     name: 'iptv-player',
     executableName: 'iptv-player',
-    appVersion: '1.2.0',
+    // appVersion intentionally omitted — packager takes it from package.json,
+    // a second copy here just drifts on the next version bump.
     icon: './assets/icon',
   },
   rebuildConfig: {},

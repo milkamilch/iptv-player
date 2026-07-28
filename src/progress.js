@@ -24,12 +24,24 @@ export async function removeHistory(key) {
   if (h[key]) { delete h[key]; await window.iptv.storeSet(HIST, h); }
 }
 
+// Watched marks are tiny but never expire on their own — keep the newest ones
+// so the store can't grow without bound over years of use.
+const WATCHED_LIMIT = 2000;
+
 export async function getWatched() {
   return (await window.iptv.storeGet(WATCHED)) || {};
 }
 export async function markWatched(key) {
   const w = await getWatched();
   w[key] = Date.now();
+  const keys = Object.keys(w);
+  if (keys.length > WATCHED_LIMIT) {
+    const keep = keys.sort((a, b) => w[b] - w[a]).slice(0, WATCHED_LIMIT);
+    const pruned = {};
+    for (const k of keep) pruned[k] = w[k];
+    await window.iptv.storeSet(WATCHED, pruned);
+    return;
+  }
   await window.iptv.storeSet(WATCHED, w);
 }
 

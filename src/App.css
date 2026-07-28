@@ -240,6 +240,7 @@ body {
   transition: background 0.15s;
 }
 .channel-item:hover { background: var(--surface-row); }
+.channel-item:focus-visible, .episode-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .channel-item.active { background: var(--accent-dim); }
 .channel-bar { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: var(--accent); border-radius: 2px; }
 .channel-logo {

@@ -30,6 +30,9 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
 
   const cover = data?.info?.cover || series.logo;
   const meta = [series.year, data?.info?.genre || series.genre].filter(Boolean);
+  // Providers send "0" for "not rated" — showing "★ 0" would be a lie.
+  const rating = data?.info?.rating || series.rating;
+  const showRating = rating && Number(rating) !== 0;
   const currentSeason = data?.seasons?.find((s) => s.season === season);
 
   function play(ep, seasonNum) {
@@ -61,9 +64,7 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
         <div className="detail-info">
           <h1 className="detail-title">{series.name}</h1>
           {meta.length > 0 && <div className="detail-meta">{meta.join(' · ')}</div>}
-          {(data?.info?.rating || series.rating) && (
-            <div className="detail-rating">★ {data?.info?.rating || series.rating}</div>
-          )}
+          {showRating && <div className="detail-rating">★ {rating}</div>}
           <div className="detail-actions">
             {resume && (
               <button className="detail-play" onClick={() => play(resume.ep, resume.season)}>
@@ -111,7 +112,11 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
               <li
                 key={ep.id}
                 className={`episode-item ${ep.id === activeEpisodeId ? 'active' : ''}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => play(ep, currentSeason.season)}
+                // Enter only — Space is the global play/pause shortcut.
+                onKeyDown={(e) => { if (e.key === 'Enter') play(ep, currentSeason.season); }}
               >
                 <span className="episode-num">{ep.episodeNum}</span>
                 <div className="episode-body">

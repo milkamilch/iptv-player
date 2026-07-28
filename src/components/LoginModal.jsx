@@ -38,12 +38,17 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
       }
       onLogin({ baseUrl, username: user.trim(), password: pass.trim(), info });
     } catch (err) {
-      // If API check fails, still allow login (some providers don't support it)
-      if (err.message?.includes('auth')) {
+      const msg = err?.message || '';
+      if (msg.includes('auth')) {
         setError('Ungültige Zugangsdaten.');
-      } else {
-        // Try anyway — provider might not have player_api.php
+      } else if (msg.includes('Ungültige JSON-Antwort')) {
+        // The server answered, just not with JSON — it has no player_api.php.
+        // That's a supported setup, so log in without the API check.
         onLogin({ baseUrl, username: user.trim(), password: pass.trim(), info: null });
+      } else {
+        // Anything else is a genuine connection problem. Logging in regardless
+        // would turn a typo'd URL into an empty app instead of an error.
+        setError('Server nicht erreichbar — bitte URL prüfen.');
       }
     } finally {
       setLoading(false);
@@ -56,7 +61,7 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
 
   return (
     <div className="login-overlay">
-      <div className="login-box">
+      <div className="login-box" role="dialog" aria-modal="true" aria-label="Anmeldung">
         <div className="login-logo">
           <span className="login-logo-dot" />
           IPTV

@@ -18,6 +18,9 @@ export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onT
 
   const poster = detail?.image || movie.logo;
   const meta = [detail?.year || movie.year, detail?.genre, detail?.duration].filter(Boolean);
+  // Providers send "0" for "not rated" — showing "★ 0" would be a lie.
+  const rating = detail?.rating || movie.rating;
+  const showRating = rating && Number(rating) !== 0;
 
   function handlePlay() {
     onPlay({ ...movie, containerExt: detail?.containerExt || movie.containerExt });
@@ -33,9 +36,7 @@ export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onT
         <div className="detail-info">
           <h1 className="detail-title">{movie.name}</h1>
           {meta.length > 0 && <div className="detail-meta">{meta.join(' · ')}</div>}
-          {(detail?.rating || movie.rating) && (
-            <div className="detail-rating">★ {detail?.rating || movie.rating}</div>
-          )}
+          {showRating && <div className="detail-rating">★ {rating}</div>}
           <div className="detail-actions">
             <button className="detail-play" onClick={handlePlay}>▶ Abspielen</button>
             <button

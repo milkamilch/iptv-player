@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron';
 import zlib from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { updateElectronApp } from 'update-electron-app';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -32,7 +33,9 @@ function parseM3U(text) {
     } else if (line.startsWith('http') || line.startsWith('rtsp') || line.startsWith('rtmp')) {
       if (current) {
         current.url = line.trim();
-        current.id = Buffer.from(current.url).toString('base64').slice(0, 16);
+        // Hash the whole URL: base64 of the first 12 bytes would be identical
+        // for every channel of the same server ("http://provi…").
+        current.id = createHash('sha1').update(current.url).digest('hex').slice(0, 16);
         channels.push(current);
         current = null;
       }
@@ -86,19 +89,6 @@ function decodeXmltv(buf, contentEncoding = '') {
   return (isGzip ? zlib.gunzipSync(buf) : buf).toString('utf-8');
 }
 
-function parseXMLTVDate(str) {
-  // Format: YYYYMMDDHHmmss
-  if (!str || str.length < 14) return null;
-  return new Date(
-    parseInt(str.slice(0, 4)),
-    parseInt(str.slice(4, 6)) - 1,
-    parseInt(str.slice(6, 8)),
-    parseInt(str.slice(8, 10)),
-    parseInt(str.slice(10, 12)),
-    parseInt(str.slice(12, 14))
-  );
-}
-
 // ── Window ────────────────────────────────────────────────────────────────────
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -123,6 +113,25 @@ const createWindow = () => {
   }
 };
 
+// ── HTTP helper ───────────────────────────────────────────────────────────────
+// Collect the body as bytes and decode once at the end. Decoding chunk by chunk
+// mangles multi-byte UTF-8 characters that straddle a chunk boundary — which is
+// how "für" turns into "f??r" in channel names, depending on packet timing.
+async function fetchText(url) {
+  const { net } = await import('electron');
+  return new Promise((resolve, reject) => {
+    const req = net.request(url);
+    const chunks = [];
+    req.on('response', (res) => {
+      res.on('data', (chunk) => { chunks.push(Buffer.from(chunk)); });
+      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // ── IPC Handlers ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('open-m3u-file', async () => {
@@ -136,20 +145,7 @@ ipcMain.handle('open-m3u-file', async () => {
   return { path: result.filePaths[0], channels: parseM3U(text) };
 });
 
-ipcMain.handle('load-m3u-url', async (_event, url) => {
-  const { net } = await import('electron');
-  return new Promise((resolve, reject) => {
-    const req = net.request(url);
-    let data = '';
-    req.on('response', (res) => {
-      res.on('data', (chunk) => { data += chunk.toString(); });
-      res.on('end', () => resolve(parseM3U(data)));
-      res.on('error', reject);
-    });
-    req.on('error', reject);
-    req.end();
-  });
-});
+ipcMain.handle('load-m3u-url', async (_event, url) => parseM3U(await fetchText(url)));
 
 ipcMain.handle('open-xmltv-file', async () => {
   const result = await dialog.showOpenDialog({
@@ -184,21 +180,9 @@ ipcMain.handle('load-xmltv-url', async (_event, url) => {
 
 // ── Xtream Codes API fetch (generic JSON) ────────────────────────────────────
 async function fetchJson(url) {
-  const { net } = await import('electron');
-  return new Promise((resolve, reject) => {
-    const req = net.request(url);
-    let data = '';
-    req.on('response', (res) => {
-      res.on('data', (chunk) => { data += chunk.toString(); });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error('Ungültige JSON-Antwort')); }
-      });
-      res.on('error', reject);
-    });
-    req.on('error', reject);
-    req.end();
-  });
+  const text = await fetchText(url);
+  try { return JSON.parse(text); }
+  catch { throw new Error('Ungültige JSON-Antwort'); }
 }
 
 ipcMain.handle('fetch-xtream', async (_event, url) => fetchJson(url));
@@ -359,11 +343,6 @@ ipcMain.handle('secure-decrypt', (_event, value) => {
   }
 });
 
-ipcMain.handle('parse-xmltv-date', (_event, str) => {
-  const d = parseXMLTVDate(str);
-  return d ? d.toISOString() : null;
-});
-
 ipcMain.handle('open-external', (_event, url) => shell.openExternal(url));
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -371,13 +350,18 @@ app.whenReady().then(() => {
   createWindow();
 
   // Auto-update from GitHub Releases (packaged builds only).
+  // NOTE: the default update source is update.electronjs.org, which only serves
+  // PUBLIC repositories. While milkamilch/iptv-player is private every check
+  // comes back 404 and no update will ever be offered — the logger below at
+  // least makes that visible instead of failing silently.
   if (app.isPackaged) {
     try {
       updateElectronApp({
         repo: 'milkamilch/iptv-player',
         updateInterval: '6 hours',
+        logger: console,
       });
-    } catch { /* offline / no release yet — ignore */ }
+    } catch (e) { console.warn('Auto-Update nicht verfügbar:', e.message); }
   }
 
   app.on('activate', () => {

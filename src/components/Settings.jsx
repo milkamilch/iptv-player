@@ -24,7 +24,13 @@ export default function Settings({ settings, onSave, onClearHistory, onClose }) 
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-box" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="settings-box"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Einstellungen"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="settings-head">
           <span className="settings-title">Einstellungen</span>
           <button className="guide-close" onClick={onClose}>✕</button>

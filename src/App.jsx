@@ -259,12 +259,21 @@ export default function App() {
     }
   }
 
-  function handleDeleteAccount(index) {
+  async function handleDeleteAccount(index) {
+    const removed = savedAccounts[index];
     const next = savedAccounts.filter((_, i) => i !== index);
     setSavedAccounts(next);
-    Promise.all(
+    const enc = await Promise.all(
       next.map(async (a) => ({ ...a, password: await window.iptv.secureEncrypt(a.password) }))
-    ).then((enc) => window.iptv.storeSet('savedAccounts', enc));
+    );
+    window.iptv.storeSet('savedAccounts', enc);
+
+    // Drop the auto-login entry too, otherwise a deleted account signs itself
+    // back in on the next start.
+    const active = await window.iptv.storeGet('activeAccount');
+    if (active && removed && active.baseUrl === removed.baseUrl && active.username === removed.username) {
+      window.iptv.storeDelete('activeAccount');
+    }
   }
 
   function handleLogout() {

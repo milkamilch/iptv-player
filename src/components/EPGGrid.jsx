@@ -83,7 +83,7 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
 
   return (
     <div className="epg-grid-overlay">
-      <div className="epg-grid-panel">
+      <div className="epg-grid-panel" role="dialog" aria-modal="true" aria-label="TV-Guide">
       <div className="epg-grid-bar">
         <span className="epg-grid-title">TV-Guide</span>
         <span className="epg-grid-sub">

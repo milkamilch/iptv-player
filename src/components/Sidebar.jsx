@@ -103,9 +103,9 @@ export default function Sidebar({
         </div>
       </div>
 
-      <ul className="channel-list">
+      <ul className="channel-list" role="listbox" aria-label={isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}>
         {items.length === 0 && (
-          <li className="channel-empty">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
+          <li className="channel-empty" role="presentation">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
         )}
         {shown.map((item) => {
           const key      = `${itemType}:${item.id}`;
@@ -117,7 +117,12 @@ export default function Sidebar({
               key={item.id}
               ref={isActive ? activeRef : null}
               className={`channel-item ${isActive ? 'active' : ''}`}
+              role="option"
+              aria-selected={isActive}
+              tabIndex={0}
               onClick={() => onItemSelect(item)}
+              // Enter only — Space is the global play/pause shortcut.
+              onKeyDown={(e) => { if (e.key === 'Enter') onItemSelect(item); }}
             >
               {isActive && <span className="channel-bar" />}
               {item.logo && !brokenLogos.has(key) ? (
@@ -145,7 +150,7 @@ export default function Sidebar({
           );
         })}
         {hidden > 0 && (
-          <li className="channel-more">+ {hidden.toLocaleString('de-DE')} weitere — Kategorie wählen oder suchen</li>
+          <li className="channel-more" role="presentation">+ {hidden.toLocaleString('de-DE')} weitere — Kategorie wählen oder suchen</li>
         )}
       </ul>
 
