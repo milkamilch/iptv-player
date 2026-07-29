@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import LoginModal from './components/LoginModal.jsx';
-import Sidebar, { RENDER_CAP } from './components/Sidebar.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import VideoPlayer from './components/VideoPlayer.jsx';
 import EPGGrid from './components/EPGGrid.jsx';
 import MovieDetail from './components/MovieDetail.jsx';
@@ -440,9 +440,7 @@ export default function App() {
   // Snapshot for the keyboard handler (avoids re-subscribing on every render).
   navRef.current = {
     mode,
-    // Only the rows the sidebar actually renders — stepping past RENDER_CAP
-    // would switch to channels that aren't in the DOM (no highlight, no scroll).
-    visibleItems: visibleItems.slice(0, RENDER_CAP),
+    visibleItems,
     activeId: activeLiveChannel?.id,
     blocked: searching || !!detailItem || guideOpen || settingsOpen,
   };

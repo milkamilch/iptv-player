@@ -95,6 +95,19 @@ export async function ev(expression) {
 const json = async (expr) => JSON.parse(await ev(`JSON.stringify(${expr})`));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const key = (k) => ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true }))`);
+// Polls instead of a fixed sleep: virtualisation re-renders on a scroll event
+// that fires asynchronously, and how long that takes depends on machine load
+// (headless/no-GPU sandboxes are measurably slower than a dev laptop). Capped
+// at 3s so a genuinely broken condition still fails instead of hanging.
+async function waitUntil(read, predicate, timeoutMs = 3000, intervalMs = 100) {
+  const start = Date.now();
+  let value = await read();
+  while (!predicate(value) && Date.now() - start < timeoutMs) {
+    await wait(intervalMs);
+    value = await read();
+  }
+  return value;
+}
 
 const results = [];
 function check(name, pass, detail = '') {
@@ -159,6 +172,47 @@ if (SCENARIO === 'live') {
   await wait(400);
   check('Quellen-Menü schließt bei Klick daneben',
     mOpen === true && (await ev(`!document.querySelector('.tb-menu')`)) === true);
+
+  // Virtualisierung: alles erreichbar, aber nicht alles im DOM.
+  // Die Gesamtzahl wird aus aria-setsize gelesen statt aus TEST_CHANNELS —
+  // so gelten diese Prüfungen unverändert weiter, sobald Task 4 ein Land
+  // vorfiltert und die Liste nur noch einen Teil der Kanäle enthält.
+  const domRows = await ev(`document.querySelectorAll('.channel-item').length`);
+  const setsize = await ev(`Number(document.querySelector('.channel-item')?.getAttribute('aria-setsize') || 0)`);
+  check('Liste rendert nur ein Fenster', domRows > 0 && domRows < 80 && setsize > domRows,
+    `${domRows} von ${setsize} Zeilen im DOM`);
+  check('kein "+ N weitere" mehr', (await ev(`!document.querySelector('.channel-more')`)) === true);
+
+  await ev(`(() => { const l = document.querySelector('.channel-list'); l.scrollTop = l.scrollHeight; })()`);
+  const lastPos = await waitUntil(
+    () => ev(`Number([...document.querySelectorAll('.channel-item')].pop()?.getAttribute('aria-posinset') || 0)`),
+    (v) => v === setsize,
+  );
+  check('Scrollen ans Ende zeigt die letzte Zeile', lastPos === setsize, `${lastPos} von ${setsize}`);
+
+  // Tiefen-Navigation braucht genug Zeilen; mit dem kleinen Standarddatensatz
+  // und aktiver Länderfilterung sind es weniger als 321.
+  if (setsize > 400) {
+    await ev(`(() => { const l = document.querySelector('.channel-list'); l.scrollTop = 0; })()`);
+    await waitUntil(
+      () => ev(`Number(document.querySelectorAll('.channel-item')[0]?.getAttribute('aria-posinset') || 0)`),
+      (v) => v === 1,
+    );
+    await ev(`document.querySelectorAll('.channel-item')[0].click()`);
+    await waitUntil(
+      () => ev(`document.querySelector('.channel-item.active')?.getAttribute('aria-posinset') || null`),
+      (v) => v === '1',
+    );
+    await ev(`document.activeElement.blur()`);
+    for (let i = 0; i < 320; i++) await key('ArrowDown');
+    const pos = await waitUntil(
+      () => ev(`Number(document.querySelector('.channel-item.active')?.getAttribute('aria-posinset') || 0)`),
+      (v) => v === 321,
+    );
+    check('Pfeiltasten kommen über Position 300 hinaus', pos === 321, `Position ${pos}`);
+  } else {
+    console.log(`  SKIP  Pfeiltasten über Position 300 — nur ${setsize} Zeilen, TEST_CHANNELS erhöhen`);
+  }
 }
 
 const exceptions = events

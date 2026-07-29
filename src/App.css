@@ -270,6 +270,7 @@ body {
 .channel-item:hover .fav-btn { opacity: 1; }
 .fav-btn.fav-on { color: var(--accent); opacity: 1; }
 .channel-more { padding: 12px 11px; font: 10.5px var(--mono); color: var(--muted-2); line-height: 1.5; }
+.vspacer { flex-shrink: 0; }
 .sidebar-footer {
   flex-shrink: 0;
   padding: 11px 16px;
