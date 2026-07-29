@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build Windows installer
         run: npm run make
 
@@ -89,6 +92,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Unit tests
+        run: npm test
 
       - name: Build Linux packages
         run: npm run make
