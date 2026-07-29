@@ -96,6 +96,11 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: UI smoke test
+        run: |
+          xvfb-run -a npm run test:ui
+          SCENARIO=login xvfb-run -a npm run test:ui
+
       - name: Build Linux packages
         run: npm run make
 
