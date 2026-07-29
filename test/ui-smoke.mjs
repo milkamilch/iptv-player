@@ -190,6 +190,36 @@ if (SCENARIO === 'live') {
   );
   check('Scrollen ans Ende zeigt die letzte Zeile', lastPos === setsize, `${lastPos} von ${setsize}`);
 
+  // Regression: schrumpft die Liste (Kategoriewechsel), während weit gescrollt
+  // wurde, darf das Fenster nicht in einer leeren Lücke hängen bleiben — genau
+  // das passiert, sobald Task 4 einen Länderfilter über eine tief gescrollte
+  // Liste legt. Die Kanalliste ist hier noch von der vorigen Prüfung ganz nach
+  // unten gescrollt; "Sport" hat ein Drittel der Einträge von "Alle".
+  await ev(`[...document.querySelectorAll('.cat-chip')].find(b => b.textContent === 'Sport').click()`);
+  await waitUntil(
+    () => ev(`document.querySelectorAll('.channel-item').length`),
+    (n) => n > 0,
+    1500,
+  );
+  const ROW_HEIGHT = 54; // wie in Sidebar.jsx — gemessene Zeilenhöhe, siehe Task-3-Entscheidung
+  const afterShrink = await json(`(() => {
+    const l = document.querySelector('.channel-list');
+    const items = document.querySelectorAll('.channel-item');
+    const first = l.firstElementChild;
+    const topSpacerPx = (first && first.classList.contains('vspacer')) ? (parseInt(first.style.height) || 0) : 0;
+    return { rows: items.length, newSetsize: Number(items[0]?.getAttribute('aria-setsize') || 0), topSpacerPx };
+  })()`);
+  check('Kategoriewechsel bei tiefem Scroll zeigt Zeilen statt Leerraum',
+    afterShrink.rows > 0 && afterShrink.topSpacerPx <= afterShrink.newSetsize * ROW_HEIGHT,
+    JSON.stringify(afterShrink));
+
+  // Zurück zu "Alle" — die restlichen Prüfungen erwarten die volle Liste.
+  await ev(`[...document.querySelectorAll('.cat-chip')].find(b => b.textContent === 'Alle').click()`);
+  await waitUntil(
+    () => ev(`Number(document.querySelector('.channel-item')?.getAttribute('aria-setsize') || 0)`),
+    (v) => v === setsize,
+  );
+
   // Tiefen-Navigation braucht genug Zeilen; mit dem kleinen Standarddatensatz
   // und aktiver Länderfilterung sind es weniger als 321.
   if (setsize > 400) {

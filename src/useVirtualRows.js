@@ -31,7 +31,16 @@ export function useVirtualRows({ ref, count, estimatedRowHeight, overscan = 3 })
   }, [rowHeight]);
 
   const perScreen = viewport > 0 ? Math.ceil(viewport / rowHeight) : 0;
-  const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const rawFirst = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  // count can shrink (e.g. a filter narrows the list) while scrollTop is
+  // still a stale, large value from before — a native scroll event that
+  // would resync it only fires once the real content height actually
+  // changes, and it can't change while first stays unclamped (see below).
+  // Clamping first here guarantees first <= last always, so the slice is
+  // never empty and padTop never overshoots the real content height; once
+  // that's true the container's true scrollHeight shrinks to match, and the
+  // browser's own scrollTop-vs-scrollHeight invariant takes over from there.
+  const first = Math.min(rawFirst, Math.max(0, count - 1));
   const last = Math.min(count, first + perScreen + overscan * 2);
 
   const scrollToIndex = useCallback((i) => {
