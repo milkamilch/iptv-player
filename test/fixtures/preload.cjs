@@ -3,6 +3,8 @@ const { contextBridge } = require('electron');
 
 const store = JSON.parse(process.env.TEST_STORE || '{}');
 const CHANNEL_COUNT = Number(process.env.TEST_CHANNELS || 420);
+const PREFIXED = process.env.TEST_PREFIXED !== '0';
+const LANDS = ['DE', 'US', 'TR', 'FR'];
 
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
@@ -11,7 +13,9 @@ for (let i = 1; i <= CHANNEL_COUNT; i++) {
     name: 'Kanal ' + i,
     url: 'http://127.0.0.1:1/live/u/p/' + i + '.m3u8',
     // mischt bewusst eine Provider-Kategorie ein, die wörtlich "Alle" heißt
-    group: i % 3 === 0 ? 'Sport' : i % 3 === 1 ? 'Alle' : 'Doku',
+    group: PREFIXED
+      ? `${LANDS[i % LANDS.length]} | ${i % 3 === 0 ? 'Sport' : i % 3 === 1 ? 'Alle' : 'Doku'}`
+      : (i % 3 === 0 ? 'Sport' : i % 3 === 1 ? 'Alle' : 'Doku'),
     logo: i % 5 === 0 ? 'http://127.0.0.1:1/broken.png' : '',
     tvgId: 'ch' + i,
   });

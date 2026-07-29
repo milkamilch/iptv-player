@@ -1,6 +1,7 @@
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { parseXMLTVDate } from '../epg.js';
 import { useVirtualRows } from '../useVirtualRows.js';
+import CountryList from './CountryList.jsx';
 
 const ROW_HEIGHT = 54; // Startwert; die Hook misst nach
 
@@ -31,6 +32,7 @@ export default function Sidebar({
   favorites, onToggleFavorite,
   globalQuery, onGlobalSearch,
   totalCount, epgReady, epg, listLoading,
+  countryView, countries, countryName, favoriteCount, onSelectCountry, onLeaveCountry,
 }) {
   const activeCatRef = useRef(null);
   const isLive = mode === 'live';
@@ -73,22 +75,48 @@ export default function Sidebar({
     setBrokenLogos((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }
 
+  // Bleibt in beiden Ansichten die unveränderte globale Suche — steht in einer
+  // lokalen Variable, damit das Suchfeld nicht doppelt im Code steht.
+  const searchBox = (
+    <div className="sidebar-search">
+      <svg className="search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none">
+        <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6"/>
+        <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+      </svg>
+      <input
+        className="search-input"
+        type="search"
+        placeholder="Filme, Serien & Sender…"
+        value={globalQuery}
+        onChange={(e) => onGlobalSearch(e.target.value)}
+      />
+    </div>
+  );
+
+  if (countryView) {
+    return (
+      <aside className="sidebar">
+        <div className="sidebar-top">{searchBox}</div>
+        <CountryList countries={countries} favoriteCount={favoriteCount} onSelect={onSelectCountry} />
+        <div className="sidebar-footer">
+          <span>{countries.length} Länder</span>
+          <span>{epgReady ? 'EPG ✓' : 'EPG …'}</span>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-top">
-        <div className="sidebar-search">
-          <svg className="search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none">
-            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6"/>
-            <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Filme, Serien & Sender…"
-            value={globalQuery}
-            onChange={(e) => onGlobalSearch(e.target.value)}
-          />
+      {countryName && (
+        <div className="crumb">
+          <button className="crumb-back" onClick={onLeaveCountry}>Alle Länder</button>
+          <span className="crumb-sep">›</span>
+          <b>{countryName}</b>
         </div>
+      )}
+      <div className="sidebar-top">
+        {searchBox}
 
         <div className="chiprow">
           {groups.map((g) => (

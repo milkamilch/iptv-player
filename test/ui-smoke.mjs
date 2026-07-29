@@ -132,15 +132,68 @@ if (SCENARIO === 'live') {
   console.log('\nSzenario: Angemeldet, Live-Modus');
   await wait(1500);
 
+  // Länderebene: erst das Land wählen. Nur vorhanden, wenn die Testdaten
+  // Länderpräfixe tragen (TEST_PREFIXED !== '0') — ohne Präfixe zeigt die
+  // Sidebar sofort die Kanalliste, und dieser ganze Block entfällt.
+  const hasCountryLevel = (await ev(`document.querySelectorAll('.country-item').length`)) > 0;
+
+  if (hasCountryLevel) {
+    const countries = await json(`[...document.querySelectorAll('.country-item .channel-name')].map(e => e.textContent)`);
+    check('Länderliste erscheint zuerst',
+      countries.includes('Deutschland') && countries.includes('USA') && countries.includes('Türkei'),
+      JSON.stringify(countries));
+    check('keine Kanalliste vor der Landauswahl',
+      (await ev(`document.querySelectorAll('.channel-item:not(.country-item)').length`)) === 0);
+
+    await ev(`[...document.querySelectorAll('.country-item')]
+      .find(e => e.textContent.includes('Deutschland')).click()`);
+    await wait(700);
+    const inCountry = await json(`({
+      crumb: document.querySelector('.crumb')?.textContent || null,
+      rows: document.querySelectorAll('.channel-item').length,
+      names: [...document.querySelectorAll('.channel-name')].slice(0, 3).map(e => e.textContent),
+      chips: [...document.querySelectorAll('.cat-chip')].map(b => b.textContent),
+    })`);
+    check('Breadcrumb zeigt das Land', /Deutschland/.test(inCountry.crumb || ''), String(inCountry.crumb));
+    check('nur Sender dieses Landes', inCountry.rows > 0 && inCountry.names.every((n) => /Kanal \d+/.test(n)),
+      JSON.stringify(inCountry.names));
+    check('Chips ohne Länderpräfix und ohne Favoriten',
+      inCountry.chips.includes('Sport') && !inCountry.chips.some((c) => c.includes('|')) &&
+      !inCountry.chips.includes('Favoriten'), JSON.stringify(inCountry.chips));
+
+    await ev(`document.querySelector('.crumb-back').click()`);
+    await wait(600);
+    check('Breadcrumb führt zurück zur Länderliste',
+      (await ev(`document.querySelectorAll('.country-item').length`)) > 0);
+
+    // Globale Suche bleibt aus der Länderliste heraus erreichbar
+    await ev(`(() => {
+      const inp = document.querySelector('.search-input');
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      set.call(inp, 'Kanal 7'); inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await wait(900);
+    check('globale Suche funktioniert aus der Länderliste',
+      (await ev(`!!document.querySelector('.search-results')`)) === true);
+    await key('Escape');
+    await wait(500);
+
+    // Zurück in ein Land für die folgenden Prüfungen
+    await ev(`[...document.querySelectorAll('.country-item')]
+      .find(e => e.textContent.includes('Deutschland')).click()`);
+    await wait(700);
+  }
+
   const chips = await json(`[...document.querySelectorAll('.cat-chip')].map(b => b.textContent)`);
   check('Kategorie "Alle" nur einmal', chips.filter((c) => c === 'Alle').length === 1, JSON.stringify(chips));
 
   check('Player ist gemountet', (await ev(`!!document.querySelector('video.video-el')`)) === true);
 
+  const names = await json(`[...document.querySelectorAll('.channel-name')].slice(0, 2).map(e => e.textContent)`);
   await ev(`document.querySelectorAll('.channel-item')[1].click()`);
   await wait(600);
   const sel = await ev(`document.querySelector('.channel-item.active .channel-name')?.textContent || null`);
-  check('Kanalauswahl markiert die Zeile', sel === 'Kanal 2', String(sel));
+  check('Kanalauswahl markiert die Zeile', sel === names[1], `${sel} erwartet ${names[1]}`);
 
   await ev(`(() => {
     const inp = document.querySelector('.search-input');
@@ -243,6 +296,20 @@ if (SCENARIO === 'live') {
   } else {
     console.log(`  SKIP  Pfeiltasten über Position 300 — nur ${setsize} Zeilen, TEST_CHANNELS erhöhen`);
   }
+
+  if (hasCountryLevel) {
+    const footer = await ev(`document.querySelector('.sidebar-footer span')?.textContent || ''`);
+    const countInCountry = Number(footer.replace(/\D/g, ''));
+    const totalChannels = Number(process.env.TEST_CHANNELS || 420);
+    check('Fußzeile zählt nur das aktive Land',
+      countInCountry > 0 && countInCountry < totalChannels, `${countInCountry} von ${totalChannels}`);
+  }
+}
+
+if (SCENARIO === 'live' && process.env.TEST_PREFIXED === '0') {
+  check('ohne Präfixe keine Länderebene',
+    (await ev(`document.querySelectorAll('.country-item').length`)) === 0 &&
+    (await ev(`document.querySelectorAll('.channel-item').length`)) > 0);
 }
 
 const exceptions = events

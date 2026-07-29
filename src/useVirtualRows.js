@@ -20,7 +20,14 @@ export function useVirtualRows({ ref, count, estimatedRowHeight, overscan = 3 })
     ro.observe(el);
     sync();
     return () => { el.removeEventListener('scroll', sync); ro.disconnect(); };
-  }, [ref]);
+    // ref.current gehört bewusst mit in die Abhängigkeiten: der Aufrufer kann
+    // denselben ref zwischen zwei Ansichten wechseln, ohne ihn neu anzulegen
+    // (die Länderliste rendert z.B. gar kein <ul ref={...}>, wodurch
+    // ref.current beim ersten Mount noch null ist). Mit nur `[ref]` als
+    // Abhängigkeit bindet der Effekt den Listener genau einmal an das erste
+    // — hier: nicht vorhandene — Element und lauscht danach nie wieder auf
+    // scroll/resize, egal wie oft das echte Element später gemountet wird.
+  }, [ref, ref.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Die echte Zeilenhöhe wird gemessen, nicht geglaubt: ändert jemand später
   // das Padding, verrutscht die Virtualisierung sonst stillschweigend.

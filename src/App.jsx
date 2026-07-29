@@ -10,6 +10,7 @@ import Toolbar from './components/Toolbar.jsx';
 import Settings from './components/Settings.jsx';
 import { movieUrl, episodeUrl } from './xtream.js';
 import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
+import { buildCountryIndex, categoriesOf, FAVORITES } from './country.mjs';
 import './App.css';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
   const [detailItem, setDetailItem]       = useState(null);   // { type:'movie'|'series', item }
   const [globalQuery, setGlobalQuery]     = useState('');
   const [activeGroup, setActiveGroup]     = useState('Alle');
+  const [activeCountry, setActiveCountry] = useState(null); // null = Länderliste
   const [epgBarOpen, setEpgBarOpen]       = useState(true);
   const [guideOpen, setGuideOpen]         = useState(false);
   const [loading, setLoading]             = useState(false);
@@ -43,13 +45,36 @@ export default function App() {
   const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
 
+  // Länderebene wird ausschließlich für Live abgeleitet; VOD-Kategorien sind
+  // bei den meisten Providern nach Genre statt nach Land benannt.
+  // Muss vor den weiter unten stehenden Effekten stehen, die countryMode und
+  // activeCountry in ihren Abhängigkeiten lesen.
+  const countryIndex = useMemo(() => buildCountryIndex(channels), [channels]);
+  const countryMode = mode === 'live' && countryIndex.enabled;
+  const favoriteCount = useMemo(
+    () => channels.filter((c) => favorites.includes(`live:${c.id}`)).length,
+    [channels, favorites],
+  );
+  const countryView = countryMode && activeCountry === null;
+
+  // Gültigkeitsprüfung — deckt verschwundene Länder und den leer geräumten
+  // Favoriten-Eintrag ab.
+  useEffect(() => {
+    if (activeCountry === null) return;
+    const ok = activeCountry === FAVORITES
+      ? favoriteCount > 0
+      : countryIndex.countries.some((c) => c.code === activeCountry);
+    if (!ok) setActiveCountry(null);
+  }, [countryIndex, favoriteCount, activeCountry]);
+
   // Load persisted data on startup
   useEffect(() => {
     Promise.all([
       window.iptv.storeGet('savedAccounts'),
       window.iptv.storeGet('favorites'),
       window.iptv.storeGet('activeAccount'),
-    ]).then(async ([accs, favs, activeAcc]) => {
+      window.iptv.storeGet('lastCountry'),
+    ]).then(async ([accs, favs, activeAcc, lastCountry]) => {
       const s = await getSettings();
       setSettings(s);
       setMode(s.defaultMode || 'live');
@@ -57,6 +82,7 @@ export default function App() {
       if (Array.isArray(favs)) {
         setFavorites(favs.map((f) => (typeof f === 'string' && f.includes(':') ? f : `live:${f}`)));
       }
+      if (typeof lastCountry === 'string') setActiveCountry(lastCountry);
       if (Array.isArray(accs)) {
         const dec = await Promise.all(
           accs.map(async (a) => ({ ...a, password: await window.iptv.secureDecrypt(a.password) }))
@@ -103,6 +129,7 @@ export default function App() {
         else if (guideOpen) setGuideOpen(false);
         else if (globalQuery) setGlobalQuery('');
         else if (detailItem) setDetailItem(null);
+        else if (countryMode && activeCountry !== null) leaveCountry();
         return;
       }
       // The settings modal is modal — don't let shortcuts act on what's behind it.
@@ -129,7 +156,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen]);
+  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen, countryMode, activeCountry]);
 
   function showToast(msg, type = 'info') {
     // Drop the pending hide timer, else an older toast's timeout cuts this one short.
@@ -147,11 +174,25 @@ export default function App() {
   }
 
   function selectChannel(ch) {
+    const m = countryIndex.meta.get(ch.id);
+    if (countryMode && m && activeCountry !== FAVORITES) selectCountry(m.code);
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
     setGlobalQuery('');
     window.iptv.storeSet('lastChannel', { id: ch.id, name: ch.name });
+  }
+
+  function selectCountry(code) {
+    setActiveCountry(code);
+    setActiveGroup('Alle');
+    window.iptv.storeSet('lastCountry', code);
+  }
+
+  function leaveCountry() {
+    setActiveCountry(null);
+    setActiveGroup('Alle');
+    window.iptv.storeDelete('lastCountry');
   }
 
   function playMovie(movie) {
@@ -375,9 +416,13 @@ export default function App() {
   // fallback for uncategorised streams), so the built-in chips have to be
   // deduplicated against the category names — otherwise React sees duplicate keys.
   const groups = useMemo(() => {
+    if (countryMode) {
+      if (activeCountry === null || activeCountry === FAVORITES) return [];
+      return [...new Set(['Alle', ...categoriesOf(countryIndex, channels, activeCountry)])];
+    }
     const fixed = mode === 'live' ? ['Alle', 'Favoriten'] : ['Alle', 'Weiter', 'Favoriten'];
     return [...new Set([...fixed, ...collection.map((c) => c.group).filter(Boolean)])];
-  }, [mode, collection]);
+  }, [countryMode, activeCountry, countryIndex, channels, mode, collection]);
 
   // "Weiter" (continue watching) list built from watch history.
   function buildContinue() {
@@ -402,15 +447,23 @@ export default function App() {
 
   // Memoised so the list keeps its identity across unrelated renders (typing in
   // the search box, clock ticks) — the sidebar memoises its EPG lookups on it.
-  const visibleItems = useMemo(() => (
-    (activeGroup === 'Weiter' && mode !== 'live')
-      ? buildContinue()
-      : collection.filter((c) => {
-          if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
-          if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
-          return true;
-        })
-  ), [activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleItems = useMemo(() => {
+    if (countryMode) {
+      if (activeCountry === null) return [];
+      if (activeCountry === FAVORITES) return channels.filter((c) => favorites.includes(`live:${c.id}`));
+      return channels.filter((c) => {
+        const m = countryIndex.meta.get(c.id);
+        if (!m || m.code !== activeCountry) return false;
+        return activeGroup === 'Alle' || m.category === activeGroup;
+      });
+    }
+    if (activeGroup === 'Weiter' && mode !== 'live') return buildContinue();
+    return collection.filter((c) => {
+      if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
+      if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
+      return true;
+    });
+  }, [countryMode, activeCountry, countryIndex, channels, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Highlight whatever the list is currently showing for the active playable —
   // for series that's the parent series of the running episode.
@@ -531,10 +584,19 @@ export default function App() {
         onToggleFavorite={toggleFavorite}
         globalQuery={globalQuery}
         onGlobalSearch={setGlobalQuery}
-        totalCount={collection.length}
+        totalCount={countryMode && activeCountry !== null ? visibleItems.length : collection.length}
         epgReady={epgReady}
         epg={epg}
         listLoading={mode === 'movies' ? moviesLoading : mode === 'series' ? seriesLoading : false}
+        countryView={countryView}
+        countries={countryIndex.countries}
+        countryName={
+          activeCountry === FAVORITES ? 'Favoriten'
+            : countryIndex.countries.find((c) => c.code === activeCountry)?.name || null
+        }
+        favoriteCount={favoriteCount}
+        onSelectCountry={selectCountry}
+        onLeaveCountry={leaveCountry}
       />
 
       {guideOpen && mode === 'live' && (
