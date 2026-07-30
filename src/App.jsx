@@ -110,12 +110,18 @@ export default function App() {
   // Restore last channel once channels are loaded (if nothing playing yet).
   // Only in live mode — otherwise a "Filme"/"Serien" start mode would still
   // fire up live TV in the background.
+  // Läuft über selectChannel statt über setActivePlayable, damit die Leiste
+  // beim Start dasselbe Land zeigt, aus dem der wiederhergestellte Kanal
+  // stammt. lastCountry und lastChannel liegen unabhängig voneinander im
+  // Store und können auseinanderlaufen (leaveCountry löscht nur das Land, ein
+  // Landwechsel ohne Kanalwahl schreibt nur das Land) — der laufende Kanal
+  // gewinnt, sonst zeigt die Liste ein Land, in dem der Kanal nicht vorkommt.
   useEffect(() => {
     if (!channels.length || activePlayable || mode !== 'live') return;
     window.iptv.storeGet('lastChannel').then((saved) => {
       if (!saved) return;
       const ch = channels.find((c) => c.id === saved.id);
-      if (ch) setActivePlayable({ ...ch, type: 'live' });
+      if (ch) selectChannel(ch);
     });
   }, [channels, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -190,7 +196,13 @@ export default function App() {
     // globalen Suche) — sonst setzt jede Kanalauswahl innerhalb desselben
     // Landes (Klick, Pfeiltasten) den aktiven Chip auf "Alle" zurück und
     // schreibt bei jeder Pfeiltaste unnötig nach lastCountry.
-    if (countryMode && m && activeCountry !== FAVORITES && m.code !== activeCountry) selectCountry(m.code);
+    // Geprüft wird `countryIndex.enabled`, NICHT `countryMode`: countryMode
+    // packt nur `mode === 'live'` obendrauf, und genau dieser Term ist beim
+    // Aufruf aus handleSearchSelect render-veraltet (setMode('live') ist dort
+    // gerade erst abgesetzt, der Re-Render kommt später). Jeder Aufrufer
+    // dieser Funktion wählt ohnehin einen Live-Kanal, der Term trägt also
+    // nichts bei außer dem Fehler.
+    if (countryIndex.enabled && m && activeCountry !== FAVORITES && m.code !== activeCountry) selectCountry(m.code);
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
@@ -617,7 +629,14 @@ export default function App() {
 
       {guideOpen && mode === 'live' && (
         <EPGGrid
-          channels={visibleItems}
+          // In der Länderansicht ist `visibleItems` leer (kein Land gewählt) —
+          // der Guide zeigt dort alle Live-Kanäle statt einer leeren Tabelle.
+          // Das ist genau der Zustand nach einer Neuinstallation, und die
+          // Zeilen sind gefenstert, kosten also auch bei voller Playlist
+          // nichts. Ein Klick im Guide trägt über selectChannel ins Land des
+          // gewählten Senders. Guide-Knopf und 'g' bleiben deshalb in beiden
+          // Ansichten aktiv und stimmen miteinander überein.
+          channels={countryView ? channels : visibleItems}
           epg={epg}
           activeChannel={activeLiveChannel}
           onSelect={selectChannel}

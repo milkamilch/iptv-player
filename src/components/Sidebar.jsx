@@ -52,9 +52,20 @@ export default function Sidebar({
   });
   const shown = useMemo(() => items.slice(first, last), [items, first, last]);
 
+  // Scrollt zur laufenden Zeile — aber nur, wenn sich das Ziel geändert hat.
+  // `items` muss in den Abhängigkeiten bleiben: im Moment, in dem ein
+  // wiederhergestellter Kanal ankommt, ist die Liste noch leer, der Effekt
+  // findet nichts und muss beim Eintreffen der Liste erneut laufen. Ohne die
+  // Ref-Sperre reißt aber jede neue Array-Identität die Liste zurück — und die
+  // entsteht in App bei jedem Favoriten-Klick, weil `favorites` in den
+  // Abhängigkeiten von `visibleItems` steht.
+  const scrolledToRef = useRef(null);
   useEffect(() => {
+    if (scrolledToRef.current === activeItemId) return;
     const i = items.findIndex((it) => it.id === activeItemId);
-    if (i >= 0) scrollToIndex(i);
+    if (i < 0) return; // noch nicht in der Liste — beim nächsten items-Wechsel erneut
+    scrolledToRef.current = activeItemId;
+    scrollToIndex(i);
   }, [activeItemId, items, scrollToIndex]);
 
   useEffect(() => {

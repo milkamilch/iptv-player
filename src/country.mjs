@@ -32,8 +32,9 @@ const COUNTRIES = {
 };
 
 // Provider schreiben durchweg UK statt des ISO-Codes GB; die übrigen sind
-// gängige Schreibweisen aus echten Playlists.
-const ALIASES = { UK: 'GB', EN: 'GB', USA: 'US', GER: 'DE', AUT: 'AT', SUI: 'CH', ESP: 'ES', POL: 'PL' };
+// gängige Schreibweisen aus echten Playlists. Bewusst NICHT dabei: EN —
+// "EN | Sport" meint fast immer die Sprache, nicht Großbritannien.
+const ALIASES = { UK: 'GB', USA: 'US', GER: 'DE', AUT: 'AT', SUI: 'CH', ESP: 'ES', POL: 'PL' };
 
 const PREFIX_RE = /^\s*([A-Za-z]{2,3})\s*[|\-:/>]\s*(.+)$/;
 

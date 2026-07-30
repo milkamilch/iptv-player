@@ -19,6 +19,12 @@ test('mappt UK auf GB', () => {
   assert.equal(parseCategory('UK: Documentary').code, 'GB');
 });
 
+test('EN ist kein Land — das ist die Sprache, nicht Großbritannien', () => {
+  const r = parseCategory('EN | Sport');
+  assert.equal(r.code, OTHER);
+  assert.equal(r.category, 'EN | Sport');
+});
+
 test('unbekannte Codes sind kein Land und behalten den vollen Namen', () => {
   for (const g of ['XX | Irgendwas', 'HD | Sport', 'VIP - Kino', '4K: Filme']) {
     const r = parseCategory(g);
