@@ -19,20 +19,40 @@ export function parseXMLTVDate(str) {
   return new Date(Y, Mo, D, H, Mi, S);
 }
 
+// Der Namens-Fallback unten muss über ALLE EPG-Schlüssel laufen, und zwar für
+// jeden Kanal, dessen tvg-id nichts trifft — bei einer großen Playlist ist das
+// der Normalfall. Object.entries + toLowerCase pro Kanal zu wiederholen ist
+// deshalb quadratisch (gemessen: 20.000 Kanäle × 3.000 EPG-Schlüssel ≈ 10 s,
+// davon rund 9,8 s allein für das wiederholte toLowerCase der Schlüssel).
+// Die kleingeschriebene Schlüsselliste hängt nur am EPG-Objekt, also wird sie
+// einmal pro EPG-Objekt gebaut und in einer WeakMap behalten — das EPG kommt
+// aus dem State und wird bei jeder Neuladung als neues Objekt ersetzt, der
+// Eintrag verschwindet also mit ihm. Reihenfolge bleibt die von
+// Object.entries, damit "erster Treffer gewinnt" unverändert dasselbe liefert.
+const lowerKeyCache = new WeakMap();
+
+function lowerKeyEntries(epg) {
+  let entries = lowerKeyCache.get(epg);
+  if (!entries) {
+    entries = Object.entries(epg).map(([key, val]) => [key.toLowerCase(), val]);
+    lowerKeyCache.set(epg, entries);
+  }
+  return entries;
+}
+
 /**
  * Find the programmes for a channel in the EPG map and return them with
  * resolved `startDate`/`stopDate`, sorted ascending by start.
  * Matching: exact tvg-id first, then a loose channel-name fallback.
  */
 export function matchProgrammes(epg, channel) {
-  if (!channel || !epg) return [];
+  if (!channel || !epg || typeof epg !== 'object') return [];
 
   let progs = epg[channel.tvgId] || [];
 
   if (!progs.length && channel.name) {
     const nameLower = channel.name.toLowerCase();
-    for (const [key, val] of Object.entries(epg)) {
-      const keyLower = key.toLowerCase();
+    for (const [keyLower, val] of lowerKeyEntries(epg)) {
       if (keyLower.includes(nameLower) || nameLower.includes(keyLower)) {
         progs = val;
         break;

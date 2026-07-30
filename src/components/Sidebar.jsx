@@ -1,9 +1,9 @@
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { parseXMLTVDate } from '../epg.js';
+import { useVirtualRows } from '../useVirtualRows.js';
+import CountryList from './CountryList.jsx';
 
-// Avoid rendering tens of thousands of VOD rows at once. Exported so the
-// keyboard navigation in App can stay in sync with what is actually visible.
-export const RENDER_CAP = 300;
+const ROW_HEIGHT = 54; // Startwert; die Hook misst nach
 
 // Two-letter fallback badge from a name, e.g. "Sky Sport" → "SS".
 function initials(name) {
@@ -32,8 +32,8 @@ export default function Sidebar({
   favorites, onToggleFavorite,
   globalQuery, onGlobalSearch,
   totalCount, epgReady, epg, listLoading,
+  countryView, countries, countryName, favoriteCount, onSelectCountry, onLeaveCountry,
 }) {
-  const activeRef    = useRef(null);
   const activeCatRef = useRef(null);
   const isLive = mode === 'live';
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
@@ -47,19 +47,33 @@ export default function Sidebar({
     return () => clearInterval(t);
   }, []);
 
+  const { first, last, padTop, padBottom, containerRef, measure, scrollToIndex } = useVirtualRows({
+    count: items.length, estimatedRowHeight: ROW_HEIGHT,
+  });
+  const shown = useMemo(() => items.slice(first, last), [items, first, last]);
+
+  // Scrollt zur laufenden Zeile — aber nur, wenn sich das Ziel geändert hat.
+  // `items` muss in den Abhängigkeiten bleiben: im Moment, in dem ein
+  // wiederhergestellter Kanal ankommt, ist die Liste noch leer, der Effekt
+  // findet nichts und muss beim Eintreffen der Liste erneut laufen. Ohne die
+  // Ref-Sperre reißt aber jede neue Array-Identität die Liste zurück — und die
+  // entsteht in App bei jedem Favoriten-Klick, weil `favorites` in den
+  // Abhängigkeiten von `visibleItems` steht.
+  const scrolledToRef = useRef(null);
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [activeItemId]);
+    if (scrolledToRef.current === activeItemId) return;
+    const i = items.findIndex((it) => it.id === activeItemId);
+    if (i < 0) return; // noch nicht in der Liste — beim nächsten items-Wechsel erneut
+    scrolledToRef.current = activeItemId;
+    scrollToIndex(i);
+  }, [activeItemId, items, scrollToIndex]);
 
   useEffect(() => {
     activeCatRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [activeGroup]);
 
-  const shown = useMemo(() => items.slice(0, RENDER_CAP), [items]);
-  const hidden = items.length - shown.length;
-
   // Resolve the current programme per visible row once — this scans the EPG for
-  // up to RENDER_CAP channels and must not run on every unrelated render.
+  // only the rows currently on screen and must not run on every unrelated render.
   const subtitles = useMemo(() => {
     if (!isLive) return {};
     const out = {};
@@ -71,22 +85,48 @@ export default function Sidebar({
     setBrokenLogos((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }
 
+  // Bleibt in beiden Ansichten die unveränderte globale Suche — steht in einer
+  // lokalen Variable, damit das Suchfeld nicht doppelt im Code steht.
+  const searchBox = (
+    <div className="sidebar-search">
+      <svg className="search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none">
+        <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6"/>
+        <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+      </svg>
+      <input
+        className="search-input"
+        type="search"
+        placeholder="Filme, Serien & Sender…"
+        value={globalQuery}
+        onChange={(e) => onGlobalSearch(e.target.value)}
+      />
+    </div>
+  );
+
+  if (countryView) {
+    return (
+      <aside className="sidebar">
+        <div className="sidebar-top">{searchBox}</div>
+        <CountryList countries={countries} favoriteCount={favoriteCount} onSelect={onSelectCountry} />
+        <div className="sidebar-footer">
+          <span>{countries.length} Länder</span>
+          <span>{epgReady ? 'EPG ✓' : 'EPG …'}</span>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-top">
-        <div className="sidebar-search">
-          <svg className="search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none">
-            <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.6"/>
-            <path d="M13 13l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          </svg>
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Filme, Serien & Sender…"
-            value={globalQuery}
-            onChange={(e) => onGlobalSearch(e.target.value)}
-          />
+      {countryName && (
+        <div className="crumb">
+          <button className="crumb-back" onClick={onLeaveCountry}>Alle Länder</button>
+          <span className="crumb-sep">›</span>
+          <b>{countryName}</b>
         </div>
+      )}
+      <div className="sidebar-top">
+        {searchBox}
 
         <div className="chiprow">
           {groups.map((g) => (
@@ -103,11 +143,18 @@ export default function Sidebar({
         </div>
       </div>
 
-      <ul className="channel-list" role="listbox" aria-label={isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}>
+      <ul
+        className="channel-list"
+        ref={containerRef}
+        role="listbox"
+        aria-label={isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}
+      >
         {items.length === 0 && (
           <li className="channel-empty" role="presentation">{listLoading ? 'lädt…' : 'Keine Einträge'}</li>
         )}
-        {shown.map((item) => {
+        {padTop > 0 && <li className="vspacer" role="presentation" style={{ height: padTop }} />}
+        {shown.map((item, i) => {
+          const index    = first + i;
           const key      = `${itemType}:${item.id}`;
           const isFav    = favorites.includes(key);
           const isActive = activeItemId === item.id;
@@ -115,10 +162,12 @@ export default function Sidebar({
           return (
             <li
               key={item.id}
-              ref={isActive ? activeRef : null}
+              ref={i === 0 ? measure : null}
               className={`channel-item ${isActive ? 'active' : ''}`}
               role="option"
               aria-selected={isActive}
+              aria-setsize={items.length}
+              aria-posinset={index + 1}
               tabIndex={0}
               onClick={() => onItemSelect(item)}
               // Enter only — Space is the global play/pause shortcut.
@@ -149,9 +198,7 @@ export default function Sidebar({
             </li>
           );
         })}
-        {hidden > 0 && (
-          <li className="channel-more" role="presentation">+ {hidden.toLocaleString('de-DE')} weitere — Kategorie wählen oder suchen</li>
-        )}
+        {padBottom > 0 && <li className="vspacer" role="presentation" style={{ height: padBottom }} />}
       </ul>
 
       <div className="sidebar-footer">

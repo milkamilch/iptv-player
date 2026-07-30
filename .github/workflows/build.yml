@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build Windows installer
         run: npm run make
 
@@ -89,6 +92,40 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      # Vier Konfigurationen, weil jede etwas anderes abdeckt und die
+      # Standardkonfiguration allein die Kernprüfungen überspringt: mit
+      # TEST_CHANNELS=420 und Länderpräfixen hat das größte Land nur 105
+      # Kanäle, und der Guard `setsize > 400` lässt "Pfeiltasten kommen über
+      # Position 300 hinaus" — die zentrale Behauptung der Spec — dann SKIP
+      # melden. Getrennte Schritte, damit im Log sofort sichtbar ist, welche
+      # Konfiguration gefallen ist.
+      - name: UI smoke test (Standard, Länderebene)
+        run: xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (20 000 Kanäle — Virtualisierung + Guide-Budget)
+        run: TEST_CHANNELS=20000 xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (ohne Länderpräfixe — keine Länderebene)
+        run: TEST_PREFIXED=0 xvfb-run -a npm run test:ui
+
+      # Die härteste Wache für das Guide-Zeitbudget: ohne Länderfilter baut der
+      # Guide über die volle Playlist. Die Variante, die die Zeilen für alle
+      # Kanäle auflöste, brauchte hier 6,8s statt 0,1s.
+      - name: UI smoke test (20 000 Kanäle ohne Länderpräfixe)
+        run: TEST_PREFIXED=0 TEST_CHANNELS=20000 xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (Login-Bildschirm)
+        run: SCENARIO=login xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (gemerktes Land beim Start)
+        run: SCENARIO=live-restore xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (gemerkter Kanal zieht das Land mit)
+        run: SCENARIO=live-restore-channel xvfb-run -a npm run test:ui
 
       - name: Build Linux packages
         run: npm run make

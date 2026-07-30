@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { matchProgrammes } from '../epg.js';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { matchProgrammes, parseXMLTVDate } from '../epg.js';
+import { useVirtualRows } from '../useVirtualRows.js';
 
 const PPM = 6;                 // pixels per minute (30 min = 180px)
 const LABEL_W = 180;           // channel column width
 const SLOT_MIN = 30;           // time-axis grid step (minutes)
 const MAX_HOURS = 24;          // cap the visible window so the track stays sane
-const ROW_CAP = 300;           // never build a row per channel for huge playlists
+const ROW_HEIGHT = 52;         // Startwert; die Hook misst nach
 
 function floorToHalfHour(d) {
   const r = new Date(d);
@@ -26,13 +27,29 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
     return () => clearInterval(t);
   }, []);
 
-  // Resolve programmes per channel once per channels/epg change. Capped: with a
-  // full playlist this would otherwise build thousands of rows and freeze the UI.
+  // Der Scroll-Container (`.epg-grid-scroll`) scrollt in beide Richtungen:
+  // vertikal fürs Fenstern (Hook), horizontal für scrollToNow() weiter unten.
+  // Die Hook sammelt das Element über einen eigenen Callback-Ref ein
+  // (containerRef); scrollToNow() braucht daneben weiterhin `scrollRef.current`
+  // für scrollLeft. Ein einzelner Merge-Callback speist beide.
+  // Zählt über `channels`, nicht über die aufgelösten Zeilen: die Zeilen
+  // entstehen erst aus dem Fenster, das diese Hook aufspannt.
+  const { first, last, padTop, padBottom, measure, containerRef } = useVirtualRows({
+    count: channels.length, estimatedRowHeight: ROW_HEIGHT,
+  });
+  const setScrollEl = useCallback((node) => {
+    scrollRef.current = node;
+    containerRef(node);
+  }, [containerRef]);
+
+  // Nur der sichtbare Ausschnitt wird aufgelöst. matchProgrammes ist pro Kanal
+  // teuer (Namens-Fallback über alle EPG-Schlüssel), und für alle Kanäle
+  // gerechnet blockiert es beim Öffnen des Guides den Renderer — inklusive des
+  // laufenden Videos, das auf demselben Thread hängt.
   const rows = useMemo(
-    () => channels.slice(0, ROW_CAP).map((ch) => ({ ch, progs: matchProgrammes(epg, ch) })),
-    [channels, epg]
+    () => channels.slice(first, last).map((ch) => ({ ch, progs: matchProgrammes(epg, ch) })),
+    [channels, epg, first, last]
   );
-  const hiddenRows = channels.length - rows.length;
 
   // Window: floor(now) → latest stop across channels, capped, min 6h.
   // Kept identity-stable across clock ticks, otherwise every 30s tick would
@@ -41,16 +58,27 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
   const flooredNow = floorToHalfHour(now);
   if (+flooredNow !== +windowStartRef.current) windowStartRef.current = flooredNow;
   const windowStart = windowStartRef.current;
-  const windowEnd = useMemo(() => {
+  // Das späteste Sendungsende ist eine Eigenschaft des EPG, nicht der
+  // Kanalliste: es hängt allein an `epg` und muss deshalb weder über alle
+  // Kanäle noch über das aktuelle Fenster laufen. Genau deswegen bleibt die
+  // Track-Breite beim Scrollen stabil, obwohl `rows` nur das Fenster kennt.
+  const latestStop = useMemo(() => {
     let max = 0;
-    for (const { progs } of rows) {
-      for (const p of progs) if (p.stopDate && p.stopDate > max) max = +p.stopDate;
+    for (const progs of Object.values(epg || {})) {
+      if (!Array.isArray(progs)) continue;
+      for (const p of progs) {
+        const stop = p.stop ? parseXMLTVDate(p.stop) : null;
+        if (stop && +stop > max) max = +stop;
+      }
     }
+    return max;
+  }, [epg]);
+  const windowEnd = useMemo(() => {
     const start = +windowStart;
     const cap = start + MAX_HOURS * 3600000;
     const min = start + 6 * 3600000;
-    return new Date(Math.min(cap, Math.max(min, max)));
-  }, [rows, windowStart]);
+    return new Date(Math.min(cap, Math.max(min, latestStop)));
+  }, [latestStop, windowStart]);
 
   const totalMin = (windowEnd - windowStart) / 60000;
   const trackW = totalMin * PPM;
@@ -86,15 +114,13 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
       <div className="epg-grid-panel" role="dialog" aria-modal="true" aria-label="TV-Guide">
       <div className="epg-grid-bar">
         <span className="epg-grid-title">TV-Guide</span>
-        <span className="epg-grid-sub">
-          {hiddenRows > 0 ? `${rows.length} von ${channels.length} Kanälen` : `${rows.length} Kanäle`} · heute
-        </span>
+        <span className="epg-grid-sub">{channels.length} Kanäle · heute</span>
         <div className="epg-grid-bar-spacer" />
         <button className="guide-now-btn" onClick={scrollToNow} title="Zur aktuellen Zeit">Jetzt</button>
         <button className="guide-close" onClick={onClose} title="Schließen (Esc)">✕</button>
       </div>
 
-      <div className="epg-grid-scroll" ref={scrollRef}>
+      <div className="epg-grid-scroll" ref={setScrollEl}>
         <div className="epg-grid-inner" style={{ width: LABEL_W + trackW }}>
           {/* time axis */}
           <div className="epg-grid-timeline" style={{ height: 32 }}>
@@ -111,10 +137,12 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
             <div className="epg-grid-nowline" style={{ left: LABEL_W + nowX, top: 32 }} />
           )}
 
-          {/* channel rows */}
-          {rows.map(({ ch, progs }) => (
+          {/* channel rows — nur der sichtbare Ausschnitt, gerahmt von Spacer-Divs */}
+          {padTop > 0 && <div style={{ height: padTop }} />}
+          {rows.map(({ ch, progs }, i) => (
             <div
               key={ch.id}
+              ref={i === 0 ? measure : null}
               className={`epg-grid-row ${activeChannel?.id === ch.id ? 'active' : ''}`}
             >
               <div
@@ -131,12 +159,12 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
 
               <div className="epg-grid-track" style={{ width: trackW }}>
                 {progs.length === 0 && <span className="epg-grid-noepg">Kein EPG</span>}
-                {progs.map((p, i) => {
+                {progs.map((p, pi) => {
                   const l = blockLayout(p);
                   if (!l) return null;
                   return (
                     <button
-                      key={i}
+                      key={pi}
                       className={`epg-grid-prog ${l.live ? 'live' : ''}`}
                       style={{ left: l.left, width: l.width }}
                       onClick={() => onSelect(ch)}
@@ -150,12 +178,7 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
               </div>
             </div>
           ))}
-
-          {hiddenRows > 0 && (
-            <div className="epg-grid-more">
-              + {hiddenRows.toLocaleString('de-DE')} weitere Kanäle — Kategorie wählen, um sie im Guide zu sehen
-            </div>
-          )}
+          {padBottom > 0 && <div style={{ height: padBottom }} />}
         </div>
       </div>
       </div>

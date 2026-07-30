@@ -10,6 +10,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
+    "test": "node --test \"src/**/*.test.mjs\"",
+    "test:ui": "vite build --config vite.renderer.config.mjs --outDir .vite/renderer-test --base ./ && node test/ui-smoke.mjs",
     "lint": "echo \"No linting configured\""
   },
   "keywords": [
