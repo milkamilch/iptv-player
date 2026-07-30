@@ -283,7 +283,6 @@ body {
 }
 .channel-item:hover .fav-btn { opacity: 1; }
 .fav-btn.fav-on { color: var(--accent); opacity: 1; }
-.channel-more { padding: 12px 11px; font: 10.5px var(--mono); color: var(--muted-2); line-height: 1.5; }
 .vspacer { flex-shrink: 0; }
 .sidebar-footer {
   flex-shrink: 0;
@@ -561,7 +560,6 @@ body {
 .epg-grid-slots { position: relative; flex-shrink: 0; }
 .epg-grid-slot { position: absolute; top: 11px; font: 600 10.5px var(--mono); color: var(--subtext); border-left: 1px solid var(--border-soft); padding-left: 8px; white-space: nowrap; }
 .epg-grid-nowline { position: absolute; bottom: 0; width: 2px; background: var(--accent); box-shadow: 0 0 10px var(--accent); z-index: 2; pointer-events: none; }
-.epg-grid-more { position: sticky; left: 0; width: max-content; padding: 14px 16px; font: 10.5px var(--mono); color: var(--muted-2); }
 .epg-grid-row { display: flex; border-bottom: 1px solid var(--border-soft); height: 52px; cursor: pointer; }
 .epg-grid-row:hover { background: rgba(255,255,255,0.03); }
 .epg-grid-channel {

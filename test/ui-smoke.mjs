@@ -261,6 +261,22 @@ if (SCENARIO === 'live') {
   check('Quellen-Menü schließt bei Klick daneben',
     mOpen === true && (await ev(`!document.querySelector('.tb-menu')`)) === true);
 
+  // TV-Guide: fenstert die Kanalzeilen genau wie die Sidebar-Kanalliste statt
+  // sie bei ROW_CAP zu kappen (Task 5). 'g' öffnet den Guide nur im Live-Modus.
+  await key('g');
+  const guide = await waitUntil(
+    () => json(`({
+      open: !!document.querySelector('.epg-grid-panel'),
+      rows: document.querySelectorAll('.epg-grid-row').length,
+      more: !!document.querySelector('.epg-grid-more'),
+    })`),
+    (v) => v.open,
+  );
+  check('Guide rendert gefenstert statt gedeckelt',
+    guide.open && guide.rows > 0 && guide.rows < 80 && !guide.more, JSON.stringify(guide));
+  await key('Escape');
+  await wait(500);
+
   // Virtualisierung: alles erreichbar, aber nicht alles im DOM.
   // Die Gesamtzahl wird aus aria-setsize gelesen statt aus TEST_CHANNELS —
   // so gelten diese Prüfungen unverändert weiter, sobald Task 4 ein Land
