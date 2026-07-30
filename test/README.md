@@ -36,6 +36,7 @@ Sinnvolle Kombinationen (so laufen sie auch in CI):
 npm run test:ui
 TEST_CHANNELS=20000 npm run test:ui
 TEST_PREFIXED=0 npm run test:ui
+TEST_PREFIXED=0 TEST_CHANNELS=20000 npm run test:ui
 SCENARIO=login npm run test:ui
 SCENARIO=live-restore npm run test:ui
 SCENARIO=live-restore-channel npm run test:ui
