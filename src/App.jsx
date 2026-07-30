@@ -57,15 +57,26 @@ export default function App() {
   );
   const countryView = countryMode && activeCountry === null;
 
-  // Gültigkeitsprüfung — deckt verschwundene Länder und den leer geräumten
-  // Favoriten-Eintrag ab.
+  // Gültigkeitsprüfung — deckt verschwundene Länder, den leer geräumten
+  // Favoriten-Eintrag und ein auf einen einzigen Eimer geschrumpftes
+  // countryIndex (enabled=false) ab. Läuft erst, sobald der Index etwas
+  // Sinnvolles sagen kann: beim Start ist `channels` noch [], und ein gerade
+  // aus dem Store wiederhergestelltes lastCountry darf nicht sofort wieder
+  // verworfen werden, nur weil der Netzwerk-Load der Kanäle noch nicht
+  // durch ist. `countryIndex.enabled` (nicht `countryMode`) ist hier
+  // absichtlich die Grundlage statt `countryMode`: enabled hängt nur an den
+  // Live-Kanälen, nicht am aktuellen `mode` — ein Wechsel zu Filme/Serien
+  // soll das gemerkte Land nicht löschen, nur die Breadcrumb-Anzeige dort
+  // ausblenden (das macht `countryName` weiter unten).
   useEffect(() => {
-    if (activeCountry === null) return;
-    const ok = activeCountry === FAVORITES
-      ? favoriteCount > 0
-      : countryIndex.countries.some((c) => c.code === activeCountry);
+    if (activeCountry === null || !channels.length) return;
+    const ok = countryIndex.enabled && (
+      activeCountry === FAVORITES
+        ? favoriteCount > 0
+        : countryIndex.countries.some((c) => c.code === activeCountry)
+    );
     if (!ok) setActiveCountry(null);
-  }, [countryIndex, favoriteCount, activeCountry]);
+  }, [channels, countryIndex, favoriteCount, activeCountry]);
 
   // Load persisted data on startup
   useEffect(() => {
@@ -175,7 +186,11 @@ export default function App() {
 
   function selectChannel(ch) {
     const m = countryIndex.meta.get(ch.id);
-    if (countryMode && m && activeCountry !== FAVORITES) selectCountry(m.code);
+    // Nur wechseln, wenn sich das Land wirklich ändert (z.B. Treffer aus der
+    // globalen Suche) — sonst setzt jede Kanalauswahl innerhalb desselben
+    // Landes (Klick, Pfeiltasten) den aktiven Chip auf "Alle" zurück und
+    // schreibt bei jeder Pfeiltaste unnötig nach lastCountry.
+    if (countryMode && m && activeCountry !== FAVORITES && m.code !== activeCountry) selectCountry(m.code);
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
@@ -591,7 +606,8 @@ export default function App() {
         countryView={countryView}
         countries={countryIndex.countries}
         countryName={
-          activeCountry === FAVORITES ? 'Favoriten'
+          !countryMode ? null // Länderebene ist Live-only — kein Breadcrumb-Leck nach Filme/Serien
+            : activeCountry === FAVORITES ? 'Favoriten'
             : countryIndex.countries.find((c) => c.code === activeCountry)?.name || null
         }
         favoriteCount={favoriteCount}

@@ -47,9 +47,8 @@ export default function Sidebar({
     return () => clearInterval(t);
   }, []);
 
-  const listRef = useRef(null);
-  const { first, last, padTop, padBottom, measure, scrollToIndex } = useVirtualRows({
-    ref: listRef, count: items.length, estimatedRowHeight: ROW_HEIGHT,
+  const { first, last, padTop, padBottom, containerRef, measure, scrollToIndex } = useVirtualRows({
+    count: items.length, estimatedRowHeight: ROW_HEIGHT,
   });
   const shown = useMemo(() => items.slice(first, last), [items, first, last]);
 
@@ -135,7 +134,7 @@ export default function Sidebar({
 
       <ul
         className="channel-list"
-        ref={listRef}
+        ref={containerRef}
         role="listbox"
         aria-label={isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}
       >

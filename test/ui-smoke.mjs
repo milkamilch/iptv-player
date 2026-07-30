@@ -1,7 +1,7 @@
 // Fährt den gebauten Renderer in Electron hoch und prüft ihn über das
 // DevTools-Protokoll. Voraussetzung: `npx vite build --config
 // vite.renderer.config.mjs --outDir <dir> --base ./` wurde ausgeführt.
-//   SCENARIO=login|live npm run test:ui
+//   SCENARIO=login|live|live-restore npm run test:ui
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -22,6 +22,14 @@ const STORES = {
   live: {
     activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+  },
+  // Deckt das Wiederherstellen eines persistierten Landes beim Start ab:
+  // lastCountry sitzt schon im Store, bevor React überhaupt mountet, und
+  // muss den Start direkt in dieses Land tragen statt in die Länderliste.
+  'live-restore': {
+    activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+    lastCountry: 'DE',
   },
 };
 
@@ -128,6 +136,22 @@ if (SCENARIO === 'login') {
   check('aktiver Tab ist "Gespeicherte"', v.activeTab === 'Gespeicherte', String(v.activeTab));
 }
 
+if (SCENARIO === 'live-restore') {
+  console.log('\nSzenario: Persistiertes Land wird beim Start wiederhergestellt');
+  await wait(2000);
+  const restored = await json(`({
+    crumb: document.querySelector('.crumb')?.textContent || null,
+    countryItems: document.querySelectorAll('.country-item').length,
+    names: [...document.querySelectorAll('.channel-name')].slice(0, 3).map(e => e.textContent),
+  })`);
+  check('Start restauriert das gemerkte Land statt der Länderliste',
+    restored.countryItems === 0 && /Deutschland/.test(restored.crumb || ''),
+    JSON.stringify(restored));
+  check('nur Sender dieses Landes direkt nach dem Start',
+    restored.names.length > 0 && restored.names.every((n) => /Kanal \d+/.test(n)),
+    JSON.stringify(restored.names));
+}
+
 if (SCENARIO === 'live') {
   console.log('\nSzenario: Angemeldet, Live-Modus');
   await wait(1500);
@@ -135,9 +159,18 @@ if (SCENARIO === 'live') {
   // Länderebene: erst das Land wählen. Nur vorhanden, wenn die Testdaten
   // Länderpräfixe tragen (TEST_PREFIXED !== '0') — ohne Präfixe zeigt die
   // Sidebar sofort die Kanalliste, und dieser ganze Block entfällt.
-  const hasCountryLevel = (await ev(`document.querySelectorAll('.country-item').length`)) > 0;
+  // Der Schalter kommt bewusst aus der Umgebungsvariable, nicht aus einer
+  // DOM-Probe: eine Probe wäre aus dem Verhalten abgeleitet, das der Block
+  // selbst prüfen soll — regrediert die Länderebene (oder rendert sie nur
+  // langsamer als der feste wait(1500) oben), würde eine Probe die Prüfungen
+  // klanglos überspringen statt sie fehlschlagen zu lassen, und die Suite
+  // würde trotzdem grün "N/N Checks bestanden" melden.
+  const expectCountryLevel = process.env.TEST_PREFIXED !== '0';
 
-  if (hasCountryLevel) {
+  if (expectCountryLevel) {
+    check('Länderebene ist vorhanden',
+      (await ev(`document.querySelectorAll('.country-item').length`)) > 0);
+
     const countries = await json(`[...document.querySelectorAll('.country-item .channel-name')].map(e => e.textContent)`);
     check('Länderliste erscheint zuerst',
       countries.includes('Deutschland') && countries.includes('USA') && countries.includes('Türkei'),
@@ -182,6 +215,8 @@ if (SCENARIO === 'live') {
     await ev(`[...document.querySelectorAll('.country-item')]
       .find(e => e.textContent.includes('Deutschland')).click()`);
     await wait(700);
+  } else {
+    console.log('  SKIP  Länderebene-Prüfungen — TEST_PREFIXED=0, kein Länderlevel erwartet');
   }
 
   const chips = await json(`[...document.querySelectorAll('.cat-chip')].map(b => b.textContent)`);
@@ -266,6 +301,19 @@ if (SCENARIO === 'live') {
     afterShrink.rows > 0 && afterShrink.topSpacerPx <= afterShrink.newSetsize * ROW_HEIGHT,
     JSON.stringify(afterShrink));
 
+  if (expectCountryLevel) {
+    // Regression: eine Kanalauswahl innerhalb desselben Landes darf den
+    // aktiven Chip nicht auf "Alle" zurücksetzen (selectChannel rief bisher
+    // bei jedem Klick/jeder Pfeiltaste selectCountry mit demselben Code auf,
+    // was den Filter unbemerkt aufhob). Der "Sport"-Chip ist von der
+    // vorigen Prüfung noch aktiv.
+    await ev(`document.querySelectorAll('.channel-item')[0].click()`);
+    await wait(500);
+    const chipAfterSelect = await ev(`document.querySelector('.cat-chip.active')?.textContent || null`);
+    check('Kanalauswahl im selben Land behält den aktiven Chip',
+      chipAfterSelect === 'Sport', String(chipAfterSelect));
+  }
+
   // Zurück zu "Alle" — die restlichen Prüfungen erwarten die volle Liste.
   await ev(`[...document.querySelectorAll('.cat-chip')].find(b => b.textContent === 'Alle').click()`);
   await waitUntil(
@@ -297,12 +345,27 @@ if (SCENARIO === 'live') {
     console.log(`  SKIP  Pfeiltasten über Position 300 — nur ${setsize} Zeilen, TEST_CHANNELS erhöhen`);
   }
 
-  if (hasCountryLevel) {
+  if (expectCountryLevel) {
     const footer = await ev(`document.querySelector('.sidebar-footer span')?.textContent || ''`);
     const countInCountry = Number(footer.replace(/\D/g, ''));
     const totalChannels = Number(process.env.TEST_CHANNELS || 420);
     check('Fußzeile zählt nur das aktive Land',
       countInCountry > 0 && countInCountry < totalChannels, `${countInCountry} von ${totalChannels}`);
+
+    // Regression: die Länderebene ist Live-only. Die Breadcrumb darf nicht
+    // nach Filme/Serien durchsickern, aber das gemerkte Land muss beim
+    // Zurückwechseln zu Live wieder da sein (nur die Anzeige wird
+    // ausgeblendet, activeCountry bleibt erhalten).
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+    await wait(500);
+    check('keine Breadcrumb in Filme', (await ev(`!document.querySelector('.crumb')`)) === true);
+
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Live').click()`);
+    await wait(500);
+    check('Breadcrumb ist nach Rückkehr zu Live wieder da',
+      /Deutschland/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
+  } else {
+    console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
   }
 }
 
