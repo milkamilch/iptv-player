@@ -93,6 +93,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `npm ci` legt die Electron-Binary auf diesem Runner nicht ab, obwohl das
+      # postinstall-Skript durchläuft — der erste UI-Test scheiterte deshalb mit
+      # ENOENT auf node_modules/electron/dist/electron. Das electron-Paket lädt
+      # sie beim ersten require() nach; hier explizit, damit ein Fehlschlag
+      # sichtbar an dieser Stelle auftritt und nicht in einem Testschritt.
+      - name: Electron-Binary bereitstellen
+        run: node -e "console.log('Electron:', require('electron'))"
+
       - name: Unit tests
         run: npm test
 

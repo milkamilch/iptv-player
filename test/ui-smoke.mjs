@@ -8,6 +8,10 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+// Das electron-Paket selbst liefert den Pfad zur Binary — und lädt sie nach,
+// falls sie fehlt. Ein fest verdrahtetes node_modules/electron/dist/electron
+// scheiterte im CI mit ENOENT, weil `npm ci` dort die Binary nicht ablegte.
+import electronPath from 'electron';
 
 const PORT = 9333;
 const HTTP_PORT = 8899;
@@ -159,7 +163,7 @@ async function run() {
   });
 
   child = spawn(
-    path.join(process.cwd(), 'node_modules/electron/dist/electron'),
+    electronPath,
     [path.join(import.meta.dirname, 'fixtures/main.cjs'), '--no-sandbox'],
     {
       stdio: 'ignore',
