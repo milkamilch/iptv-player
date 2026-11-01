@@ -86,7 +86,7 @@ body {
   color: var(--accent-text);
   white-space: nowrap;
 }
-.tb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.tb-mark { filter: drop-shadow(0 0 6px var(--accent)); }
 .tb-nav { display: flex; align-items: center; gap: 4px; }
 .tb-pill {
   padding: 7px 15px;
@@ -618,7 +618,7 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
 }
 .login-logo { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-.login-logo-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 16px var(--accent); animation: dvpulse 2.6s ease-in-out infinite; }
+.login-logo-mark { animation: dvpulse 2.6s ease-in-out infinite; }
 .login-subtitle { font-size: 12.5px; color: var(--subtext); margin-top: -8px; }
 .login-tabs { display: flex; width: 100%; background: var(--surface-row); border-radius: 11px; padding: 4px; gap: 4px; margin-top: 6px; }
 .login-tab { flex: 1; text-align: center; padding: 8px; border: none; background: transparent; border-radius: 8px; color: var(--subtext); font: inherit; font-size: 12.5px; cursor: pointer; }

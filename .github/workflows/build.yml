@@ -34,7 +34,7 @@ jobs:
       - name: Smoke-test installer (silent install + launch)
         shell: pwsh
         run: |
-          $setup = Get-ChildItem -Recurse -Path out/make -Filter 'IPTV-Player-Setup.exe' | Select-Object -First 1
+          $setup = Get-ChildItem -Recurse -Path out/make -Filter 'Nightwave-Setup.exe' | Select-Object -First 1
           if (-not $setup) { throw "Setup.exe not found under out/make" }
           Write-Host "Installer: $($setup.FullName) ($([math]::Round($setup.Length/1MB,1)) MB)"
 
@@ -48,6 +48,13 @@ jobs:
                  Where-Object { $_.FullName -match '\\app-' } | Select-Object -First 1
           if (-not $exe) { throw "Versioned app executable (app-*\iptv-player.exe) not found under $installDir" }
           Write-Host "✔ Installed: $($exe.FullName)"
+
+          # win32metadata.ProductName names the Start menu shortcut; Squirrel creates it asynchronously.
+          $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Nightwave.lnk'
+          $deadline = (Get-Date).AddSeconds(30)
+          while (-not (Test-Path $lnk) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
+          if (-not (Test-Path $lnk)) { throw "Start menu shortcut not found: $lnk" }
+          Write-Host "✔ Shortcut: $lnk"
 
           Write-Host "Launching app to verify it boots…"
           $p = Start-Process -FilePath $exe.FullName -ArgumentList '--no-sandbox' -PassThru
@@ -143,6 +150,7 @@ jobs:
           set -euo pipefail
           exe=$(find out -maxdepth 3 -type f -name iptv-player -perm -u+x | head -1)
           if [ -z "$exe" ]; then echo "app binary not found under out/"; exit 1; fi
+          test -f "$(dirname "$exe")/resources/icon.png" || { echo "resources/icon.png missing"; exit 1; }
           echo "Launching $exe"
           xvfb-run -a "$exe" --no-sandbox &
           pid=$!

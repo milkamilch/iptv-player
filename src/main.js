@@ -11,6 +11,8 @@ import Store from 'electron-store';
 
 if (started) app.quit();
 
+// productName bleibt 'IPTV Player': userData-Ordner und Keyring-Schlüssel (safeStorage)
+// hängen am App-Namen, eine Umbenennung machte gespeicherte Zugänge unlesbar.
 const store = new Store();
 
 // ── M3U Parser ────────────────────────────────────────────────────────────────
@@ -102,7 +104,10 @@ const createWindow = () => {
       webSecurity: false, // needed to load IPTV stream URLs cross-origin
     },
     titleBarStyle: 'default',
-    title: 'IPTV Player',
+    title: 'Nightwave',
+    icon: process.platform === 'linux'
+      ? (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(__dirname, '../../assets/icon.png'))
+      : undefined,
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

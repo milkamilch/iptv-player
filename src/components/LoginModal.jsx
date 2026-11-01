@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import BrandMark from './BrandMark.jsx';
 
 export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, onDeleteAccount }) {
   const [url, setUrl]       = useState('');
@@ -63,8 +64,8 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
     <div className="login-overlay">
       <div className="login-box" role="dialog" aria-modal="true" aria-label="Anmeldung">
         <div className="login-logo">
-          <span className="login-logo-dot" />
-          IPTV
+          <BrandMark className="login-logo-mark" size={28} />
+          Nightwave
         </div>
         <div className="login-subtitle">Xtream Codes kompatibel</div>
 

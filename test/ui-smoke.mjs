@@ -199,6 +199,11 @@ async function run() {
     })`);
     check('gespeicherte Zugänge werden direkt gelistet', v.rows === 2 && v.form === false, JSON.stringify(v));
     check('aktiver Tab ist "Gespeicherte"', v.activeTab === 'Gespeicherte', String(v.activeTab));
+    const logo = await json(`({
+      text: document.querySelector('.login-logo')?.textContent.trim() || null,
+      svg: !!document.querySelector('.login-logo svg'),
+    })`);
+    check('Login zeigt Nightwave mit Logo', logo.text === 'Nightwave' && logo.svg, JSON.stringify(logo));
   }
 
   if (SCENARIO === 'live-restore') {
@@ -260,6 +265,14 @@ async function run() {
   if (SCENARIO === 'live') {
     console.log('\nSzenario: Angemeldet, Live-Modus');
     await wait(1500);
+
+    const brand = await json(`({
+      text: document.querySelector('.tb-logo')?.textContent.trim() || null,
+      svg: !!document.querySelector('.tb-logo svg'),
+      title: document.title,
+    })`);
+    check('Navbar zeigt Nightwave mit Logo', brand.text === 'Nightwave' && brand.svg, JSON.stringify(brand));
+    check('Seitentitel ist Nightwave', brand.title === 'Nightwave', brand.title);
 
     // Länderebene: erst das Land wählen. Nur vorhanden, wenn die Testdaten
     // Länderpräfixe tragen (TEST_PREFIXED !== '0') — ohne Präfixe zeigt die

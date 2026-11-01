@@ -1,4 +1,6 @@
-# IPTV Player
+# Nightwave
+
+(ehemals IPTV Player)
 
 Ein schlanker Desktop-IPTV-Player für **Live-TV, Filme und Serien** über
 **Xtream Codes** (oder M3U-Playlists). Dark, minimalistisch, futuristisch —
@@ -51,7 +53,7 @@ Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
 
 ### Windows (fertiger Installer)
 
-1. Neuesten **`IPTV-Player-Setup.exe`** von der
+1. Neuesten **`Nightwave-Setup.exe`** von der
    [Releases-Seite](https://github.com/milkamilch/iptv-player/releases/latest)
    herunterladen.
 2. Doppelklick → installiert die App (Startmenü-Eintrag, kein Terminal nötig).
@@ -88,7 +90,7 @@ npm run make
 
 Erzeugt in `out/make/` je nach Plattform:
 
-- **Windows** → `IPTV-Player-Setup.exe` (Squirrel)
+- **Windows** → `Nightwave-Setup.exe` (Squirrel)
 - **Linux** → `.deb`, `.rpm`
 - **alle** → `.zip`
 
@@ -125,7 +127,7 @@ Windows-Installer auf einem echten Windows-Runner:
 
 - **Push auf `master`** → Installer als herunterladbares **Artefakt**
 - **Tag `v*`** (z. B. `git tag v1.1.0 && git push origin v1.1.0`) → veröffentlicht
-  automatisch einen **GitHub Release** mit angehängtem `IPTV-Player-Setup.exe`
+  automatisch einen **GitHub Release** mit angehängtem `Nightwave-Setup.exe`
 
 ---
 

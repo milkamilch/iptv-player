@@ -9,6 +9,9 @@ module.exports = {
     // appVersion intentionally omitted — packager takes it from package.json,
     // a second copy here just drifts on the next version bump.
     icon: './assets/icon',
+    // plugin-vite packt nur .vite; das Fenster-Icon unter Linux liegt in resources/.
+    extraResource: ['./assets/icon.png'],
+    win32metadata: { ProductName: 'Nightwave', FileDescription: 'Nightwave' },
   },
   rebuildConfig: {},
   makers: [
@@ -16,11 +19,13 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
       config: {
+        // name bleibt: Install-Ordner und Paket-ID, sonst finden Bestandsinstallationen keine Updates.
         name: 'iptv_player',
+        title: 'Nightwave',
         authors: 'Lars Wenner',
         description: 'Lightweight IPTV player with M3U playlists, EPG and HLS streaming',
         setupIcon: './assets/icon.ico',
-        setupExe: 'IPTV-Player-Setup.exe',
+        setupExe: 'Nightwave-Setup.exe',
         iconUrl: 'https://raw.githubusercontent.com/milkamilch/iptv-player/master/assets/icon.png',
       },
     },
@@ -29,7 +34,7 @@ module.exports = {
       config: {
         options: {
           name: 'iptv-player',
-          productName: 'IPTV Player',
+          productName: 'Nightwave',
           genericName: 'IPTV Player',
           description: 'Lightweight IPTV player with M3U playlists, EPG and HLS streaming',
           homepage: 'https://github.com/milkamilch/iptv-player',
@@ -45,7 +50,7 @@ module.exports = {
       config: {
         options: {
           name: 'iptv-player',
-          productName: 'IPTV Player',
+          productName: 'Nightwave',
           description: 'Lightweight IPTV player with M3U playlists, EPG and HLS streaming',
           homepage: 'https://github.com/milkamilch/iptv-player',
           icon: './assets/icon.png',
