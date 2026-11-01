@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import BrandMark from './BrandMark.jsx';
 
 const MODES = [
   { key: 'live',   label: 'Live' },
@@ -46,8 +47,8 @@ export default function Toolbar({
   return (
     <div className="toolbar">
       <span className="tb-logo">
-        <span className="tb-dot" />
-        IPTV
+        <BrandMark className="tb-mark" size={18} />
+        Nightwave
       </span>
 
       <nav className="tb-nav">

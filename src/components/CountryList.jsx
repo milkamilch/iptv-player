@@ -1,13 +1,32 @@
-import { FAVORITES } from '../country.mjs';
+import { FAVORITES, CONTINUE } from '../country.mjs';
 
-// Erste Ebene der Seitenleiste: Land wählen. Bewusst ohne Virtualisierung —
-// mehr als ~60 Einträge kann die Tabelle in country.mjs gar nicht erzeugen.
-export default function CountryList({ countries, favoriteCount, onSelect }) {
+// Ebene der Seitenleiste vor der Liste: Land (kind 'country') oder Kategorie
+// (kind 'category') wählen. Bewusst ohne Virtualisierung — mehr als ~60 Länder
+// kann die Tabelle in country.mjs gar nicht erzeugen, Kategorien sind wenige hundert.
+export default function CountryList({ countries, favoriteCount, continueCount, onSelect, kind = 'country' }) {
+  const rowClass = `channel-item ${kind === 'category' ? 'category-item' : 'country-item'}`;
   return (
-    <ul className="channel-list" role="listbox" aria-label="Länder">
+    <ul className="channel-list" role="listbox" aria-label={kind === 'category' ? 'Kategorien' : 'Länder'}>
+      {continueCount > 0 && (
+        <li
+          className={rowClass}
+          role="option"
+          aria-selected={false}
+          tabIndex={0}
+          onClick={() => onSelect(CONTINUE)}
+          onKeyDown={(e) => { if (e.key === 'Enter') onSelect(CONTINUE); }}
+        >
+          <div className="channel-logo channel-logo-ph">▶</div>
+          <div className="channel-text">
+            <span className="channel-name">Weiter</span>
+            <span className="channel-sub">angefangen</span>
+          </div>
+          <span className="country-count">{continueCount.toLocaleString('de-DE')}</span>
+        </li>
+      )}
       {favoriteCount > 0 && (
         <li
-          className="channel-item country-item"
+          className={rowClass}
           role="option"
           aria-selected={false}
           tabIndex={0}
@@ -17,7 +36,7 @@ export default function CountryList({ countries, favoriteCount, onSelect }) {
           <div className="channel-logo channel-logo-ph">★</div>
           <div className="channel-text">
             <span className="channel-name">Favoriten</span>
-            <span className="channel-sub">länderübergreifend</span>
+            {kind === 'country' && <span className="channel-sub">länderübergreifend</span>}
           </div>
           <span className="country-count">{favoriteCount.toLocaleString('de-DE')}</span>
         </li>
@@ -25,7 +44,7 @@ export default function CountryList({ countries, favoriteCount, onSelect }) {
       {countries.map((c) => (
         <li
           key={c.code}
-          className="channel-item country-item"
+          className={rowClass}
           role="option"
           aria-selected={false}
           tabIndex={0}

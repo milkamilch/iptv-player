@@ -34,7 +34,7 @@ jobs:
       - name: Smoke-test installer (silent install + launch)
         shell: pwsh
         run: |
-          $setup = Get-ChildItem -Recurse -Path out/make -Filter 'IPTV-Player-Setup.exe' | Select-Object -First 1
+          $setup = Get-ChildItem -Recurse -Path out/make -Filter 'Nightwave-Setup.exe' | Select-Object -First 1
           if (-not $setup) { throw "Setup.exe not found under out/make" }
           Write-Host "Installer: $($setup.FullName) ($([math]::Round($setup.Length/1MB,1)) MB)"
 
@@ -48,6 +48,16 @@ jobs:
                  Where-Object { $_.FullName -match '\\app-' } | Select-Object -First 1
           if (-not $exe) { throw "Versioned app executable (app-*\iptv-player.exe) not found under $installDir" }
           Write-Host "✔ Installed: $($exe.FullName)"
+
+          # Squirrel creates the shortcut asynchronously under Programs\<CompanyName>\, so search recursively.
+          $programs = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+          $deadline = (Get-Date).AddSeconds(30)
+          do {
+            $lnk = Get-ChildItem -Recurse -Path $programs -Filter 'Nightwave.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $lnk) { Start-Sleep -Seconds 1 }
+          } while (-not $lnk -and (Get-Date) -lt $deadline)
+          if (-not $lnk) { throw "Start menu shortcut Nightwave.lnk not found under $programs" }
+          Write-Host "✔ Shortcut: $($lnk.FullName)"
 
           Write-Host "Launching app to verify it boots…"
           $p = Start-Process -FilePath $exe.FullName -ArgumentList '--no-sandbox' -PassThru
@@ -135,6 +145,9 @@ jobs:
       - name: UI smoke test (gemerkter Kanal zieht das Land mit)
         run: SCENARIO=live-restore-channel xvfb-run -a npm run test:ui
 
+      - name: UI smoke test (Weiter in der Ladephase der Filme)
+        run: SCENARIO=vod-delay xvfb-run -a npm run test:ui
+
       - name: Build Linux packages
         run: npm run make
 
@@ -143,6 +156,7 @@ jobs:
           set -euo pipefail
           exe=$(find out -maxdepth 3 -type f -name iptv-player -perm -u+x | head -1)
           if [ -z "$exe" ]; then echo "app binary not found under out/"; exit 1; fi
+          test -f "$(dirname "$exe")/resources/icon.png" || { echo "resources/icon.png missing"; exit 1; }
           echo "Launching $exe"
           xvfb-run -a "$exe" --no-sandbox &
           pid=$!

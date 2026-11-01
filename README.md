@@ -1,4 +1,6 @@
-# IPTV Player
+# Nightwave
+
+(formerly IPTV Player)
 
 A lightweight desktop IPTV player for **live TV, movies and series** via
 **Xtream Codes** (or M3U playlists). Dark, minimalist, futuristic —
@@ -13,8 +15,12 @@ a full-screen video feed with floating frosted-glass panels.
 - **Live TV** — channels via the Xtream Codes JSON API, sorted by category
 - **Movies (VOD)** — with a detail page (poster, plot, year, genre, rating)
 - **Series** — detail page with season picker and episode list
-- **Global search** — searches channels, movies and series at once; results
-  grouped by type
+- **Country filter** — live, movies and series by country (from the category;
+  for movies and series otherwise from the title prefix); the chosen country
+  applies in all modes
+- **Navigation** — country → category → list; "All" shows everything of a
+  country, the breadcrumb and `Esc` go back one level
+- **Search** — searches the active mode only (channels, movies or series)
 - **EPG / programme guide**
   - Now/Next bar for the current channel (with progress bar)
   - **TV guide** — full time grid of all channels (key `g`)
@@ -50,7 +56,7 @@ a full-screen video feed with floating frosted-glass panels.
 
 ### Windows (prebuilt installer)
 
-1. Download the latest **`IPTV-Player-Setup.exe`** from the
+1. Download the latest **`Nightwave-Setup.exe`** from the
    [Releases page](https://github.com/milkamilch/iptv-player/releases/latest).
 2. Double-click → installs the app (Start menu entry, no terminal needed).
 
@@ -86,7 +92,7 @@ npm run make
 
 Produces in `out/make/`, depending on the platform:
 
-- **Windows** → `IPTV-Player-Setup.exe` (Squirrel)
+- **Windows** → `Nightwave-Setup.exe` (Squirrel)
 - **Linux** → `.deb`, `.rpm`
 - **all** → `.zip`
 
@@ -103,7 +109,7 @@ After launch, enter your Xtream Codes credentials:
 - **Username** and **password** from your IPTV provider
 
 The app then loads live channels (immediately) as well as movies and series (in
-the background, for global search).
+the background).
 
 ### Keyboard shortcuts
 
@@ -112,7 +118,7 @@ the background, for global search).
 | `g` | Open/close TV guide (in live mode) |
 | `↑` / `↓` | Previous / next channel (live) |
 | `Space` | Play / pause |
-| `Esc` | Go back one level (guide → search → detail) |
+| `Esc` | Go back one level (guide → search → detail → list → categories → countries) |
 
 ---
 
@@ -124,7 +130,7 @@ Windows installer on a real Windows runner and the Linux packages
 
 - **Push to `master`** → packages as downloadable **artifacts**
 - **Tag `v*`** (e.g. `git tag v1.1.0 && git push origin v1.1.0`) → automatically
-  publishes a **GitHub Release** with `IPTV-Player-Setup.exe` and the Linux packages attached
+  publishes a **GitHub Release** with `Nightwave-Setup.exe` and the Linux packages attached
 
 ---
 

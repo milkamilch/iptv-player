@@ -1,7 +1,7 @@
 {
   "name": "iptv-player",
   "productName": "IPTV Player",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A lightweight Linux IPTV player with M3U playlists, EPG support, favorites and HLS streaming",
   "main": ".vite/build/main.js",
   "private": true,

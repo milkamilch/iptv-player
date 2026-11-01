@@ -41,6 +41,8 @@ const STORES = {
   live: {
     activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+    // Schlüssel wie in src/progress.js; macht "Weiter" in Filme erreichbar
+    watchHistory: { 'movie:900': { updatedAt: 1, card: { kind: 'movie', id: '900', name: 'Testfilm', logo: '', containerExt: 'mp4' } } },
   },
   // Deckt das Wiederherstellen eines persistierten Landes beim Start ab:
   // lastCountry sitzt schon im Store, bevor React überhaupt mountet, und
@@ -61,6 +63,14 @@ const STORES = {
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
     lastCountry: 'DE',
     lastChannel: { id: '7', name: 'Kanal 7' },
+  },
+  // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
+  // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
+  'vod-delay': {
+    activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'movies', hlsBuffer: 'normal', epgUrl: '' },
+    lastCountry: 'DE',
+    watchHistory: { 'movie:900': { updatedAt: 1, card: { kind: 'movie', id: '900', name: 'Testfilm', logo: '', containerExt: 'mp4' } } },
   },
 };
 
@@ -112,6 +122,14 @@ function check(name, pass, detail = '') {
   results.push(pass);
   console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? ' — ' + detail : ''}`);
 }
+
+// Kategorienebene: Eintrag der Kategorienliste anklicken, Breadcrumb als Text lesen.
+const pick = async (name) => {
+  await ev(`[...document.querySelectorAll('.category-item')]
+    .find(e => e.querySelector('.channel-name')?.textContent === ${JSON.stringify(name)}).click()`);
+  await wait(500);
+};
+const crumb = () => ev(`document.querySelector('.crumb')?.textContent ?? null`);
 
 async function findPage() {
   for (let i = 0; i < 60; i++) {
@@ -171,6 +189,7 @@ async function run() {
         ...process.env,
         APP_URL: `http://127.0.0.1:${HTTP_PORT}/index.html`,
         TEST_STORE: JSON.stringify(STORES[SCENARIO]),
+        TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
       },
     },
   );
@@ -197,6 +216,11 @@ async function run() {
     })`);
     check('gespeicherte Zugänge werden direkt gelistet', v.rows === 2 && v.form === false, JSON.stringify(v));
     check('aktiver Tab ist "Gespeicherte"', v.activeTab === 'Gespeicherte', String(v.activeTab));
+    const logo = await json(`({
+      text: document.querySelector('.login-logo')?.textContent.trim() || null,
+      svg: !!document.querySelector('.login-logo svg'),
+    })`);
+    check('Login zeigt Nightwave mit Logo', logo.text === 'Nightwave' && logo.svg, JSON.stringify(logo));
   }
 
   if (SCENARIO === 'live-restore') {
@@ -207,25 +231,49 @@ async function run() {
       // ist false und das gemerkte 'DE' im Store ist gegenstandslos. Geprüft wird
       // dann der sinnvolle Rückfall: direkt die Kanalliste, keine Breadcrumb, kein
       // hängengebliebenes Land — nicht das Länderverhalten, das es hier nicht gibt.
+      // Erste Ebene ist dann die Kategorienliste.
       const plain = await json(`({
         crumb: document.querySelector('.crumb')?.textContent || null,
         countryItems: document.querySelectorAll('.country-item').length,
-        rows: document.querySelectorAll('.channel-item').length,
+        categoryItems: document.querySelectorAll('.category-item').length,
+        rows: document.querySelectorAll('.channel-item:not(.category-item)').length,
       })`);
       check('ohne Präfixe ignoriert der Start das gemerkte Land',
-        plain.countryItems === 0 && plain.crumb === null && plain.rows > 0, JSON.stringify(plain));
+        plain.countryItems === 0 && plain.categoryItems > 0 && plain.rows === 0 && plain.crumb === null,
+        JSON.stringify(plain));
     } else {
       const restored = await json(`({
         crumb: document.querySelector('.crumb')?.textContent || null,
         countryItems: document.querySelectorAll('.country-item').length,
-        names: [...document.querySelectorAll('.channel-name')].slice(0, 3).map(e => e.textContent),
+        names: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
       })`);
       check('Start restauriert das gemerkte Land statt der Länderliste',
-        restored.countryItems === 0 && /Deutschland/.test(restored.crumb || ''),
+        restored.countryItems === 0 && restored.crumb === 'Alle Länder›Deutschland',
         JSON.stringify(restored));
-      check('nur Sender dieses Landes direkt nach dem Start',
-        restored.names.length > 0 && restored.names.every((n) => /Kanal \d+/.test(n)),
+      check('Start zeigt die Kategorien des gemerkten Landes',
+        restored.names[0] === 'Alle' && restored.names.includes('Sport'),
         JSON.stringify(restored.names));
+    }
+  }
+
+  if (SCENARIO === 'vod-delay') {
+    console.log('\nSzenario: "Weiter" in der Ladephase der Filme');
+    if (process.env.TEST_PREFIXED === '0') {
+      console.log('  SKIP  Weiter in der Ladephase — TEST_PREFIXED=0, keine Länderebene');
+    } else {
+      // Ohne geladene Filme ist die Kategorienliste die erste Ebene, "Weiter"
+      // steht darin. Nach dem Laden gibt es die Länderebene: der alte Klick
+      // darf keine leere Liste "…›Weiter" hinterlassen.
+      await ev(`[...document.querySelectorAll('.category-item')]
+        .find(e => e.querySelector('.channel-name')?.textContent === 'Weiter').click()`);
+      const loaded = await waitUntil(
+        () => json(`({
+          crumb: document.querySelector('.crumb')?.textContent || null,
+          cats: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
+        })`),
+        (v) => v.cats.includes('NETFLIX MOVIES'), 10000);
+      check('Weiter aus der Ladephase endet in der Kategorienliste des Landes',
+        loaded.crumb === 'Alle Länder›Deutschland' && !loaded.cats.includes('Weiter'), JSON.stringify(loaded));
     }
   }
 
@@ -242,12 +290,12 @@ async function run() {
       // dass der gemerkte Kanal überhaupt anläuft.
       const plain = await waitUntil(read, (v) => v.active === 'Kanal 7', 5000);
       check('ohne Präfixe läuft der gemerkte Kanal ohne Land an',
-        plain.crumb === null && plain.active === 'Kanal 7', JSON.stringify(plain));
+        plain.crumb === 'Alle Kategorien›Alle' && plain.active === 'Kanal 7', JSON.stringify(plain));
     } else {
       const restored = await waitUntil(
         read, (v) => /Frankreich/.test(v.crumb || '') && v.active === 'Kanal 7', 5000);
       check('Start synchronisiert das Land mit dem wiederhergestellten Kanal',
-        /Frankreich/.test(restored.crumb || '') && restored.active === 'Kanal 7' &&
+        restored.crumb === 'Alle Länder›Frankreich›Alle' && restored.active === 'Kanal 7' &&
         /Kanal 7$/.test(restored.tag || ''), JSON.stringify(restored));
       // Und der Store zieht nach, damit der Widerspruch nicht den nächsten Start überlebt.
       const persisted = await ev(`window.iptv.storeGet('lastCountry')`);
@@ -259,6 +307,14 @@ async function run() {
     console.log('\nSzenario: Angemeldet, Live-Modus');
     await wait(1500);
 
+    const brand = await json(`({
+      text: document.querySelector('.tb-logo')?.textContent.trim() || null,
+      svg: !!document.querySelector('.tb-logo svg'),
+      title: document.title,
+    })`);
+    check('Navbar zeigt Nightwave mit Logo', brand.text === 'Nightwave' && brand.svg, JSON.stringify(brand));
+    check('Seitentitel ist Nightwave', brand.title === 'Nightwave', brand.title);
+
     // Länderebene: erst das Land wählen. Nur vorhanden, wenn die Testdaten
     // Länderpräfixe tragen (TEST_PREFIXED !== '0') — ohne Präfixe zeigt die
     // Sidebar sofort die Kanalliste, und dieser ganze Block entfällt.
@@ -269,6 +325,12 @@ async function run() {
     // klanglos überspringen statt sie fehlschlagen zu lassen, und die Suite
     // würde trotzdem grün "N/N Checks bestanden" melden.
     const expectCountryLevel = process.env.TEST_PREFIXED !== '0';
+
+    const readGuide = () => json(`({
+      open: !!document.querySelector('.epg-grid-panel'),
+      rows: document.querySelectorAll('.epg-grid-row').length,
+      sub: document.querySelector('.epg-grid-sub')?.textContent || '',
+    })`);
 
     if (expectCountryLevel) {
       check('Länderebene ist vorhanden',
@@ -285,11 +347,6 @@ async function run() {
       // ist der Zustand direkt nach einer Neuinstallation. Er bekam dort
       // `visibleItems`, und das ist ohne gewähltes Land []. Ohne Land zeigt er
       // alle Live-Kanäle.
-      const readGuide = () => json(`({
-        open: !!document.querySelector('.epg-grid-panel'),
-        rows: document.querySelectorAll('.epg-grid-row').length,
-        sub: document.querySelector('.epg-grid-sub')?.textContent || '',
-      })`);
       await key('g');
       const gCountryView = await waitUntil(readGuide, (v) => v.open && v.rows > 0);
       check('Guide zeigt ohne gewähltes Land alle Kanäle',
@@ -313,21 +370,44 @@ async function run() {
       await wait(700);
       const inCountry = await json(`({
         crumb: document.querySelector('.crumb')?.textContent || null,
-        rows: document.querySelectorAll('.channel-item').length,
-        names: [...document.querySelectorAll('.channel-name')].slice(0, 3).map(e => e.textContent),
-        chips: [...document.querySelectorAll('.cat-chip')].map(b => b.textContent),
+        rows: document.querySelectorAll('.channel-item:not(.category-item)').length,
+        cats: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
       })`);
       check('Breadcrumb zeigt das Land', /Deutschland/.test(inCountry.crumb || ''), String(inCountry.crumb));
-      check('nur Sender dieses Landes', inCountry.rows > 0 && inCountry.names.every((n) => /Kanal \d+/.test(n)),
-        JSON.stringify(inCountry.names));
-      check('Chips ohne Länderpräfix und ohne Favoriten',
-        inCountry.chips.includes('Sport') && !inCountry.chips.some((c) => c.includes('|')) &&
-        !inCountry.chips.includes('Favoriten'), JSON.stringify(inCountry.chips));
+      check('Land öffnet die Kategorienliste',
+        inCountry.cats.includes('Sport') && !inCountry.cats.some((c) => c.includes('|')) &&
+        !inCountry.cats.includes('Weiter') && !inCountry.cats.includes('Favoriten') && inCountry.rows === 0,
+        JSON.stringify(inCountry));
 
-      await ev(`document.querySelector('.crumb-back').click()`);
-      await wait(600);
-      check('Breadcrumb führt zurück zur Länderliste',
-        (await ev(`document.querySelectorAll('.country-item').length`)) > 0);
+      await pick('Sport');
+      const inCategory = await json(`({
+        crumb: document.querySelector('.crumb')?.textContent || null,
+        names: [...document.querySelectorAll('.channel-name')].slice(0, 3).map(e => e.textContent),
+        setsize: Number(document.querySelector('.channel-item')?.getAttribute('aria-setsize') || 0),
+      })`);
+      check('Kategorie zeigt nur ihre Sender',
+        inCategory.crumb === 'Alle Länder›Deutschland›Sport' &&
+        inCategory.names.length > 0 && inCategory.names.every((n) => /Kanal \d+/.test(n)) &&
+        inCategory.setsize === Math.floor(TOTAL_CHANNELS / 12),
+        JSON.stringify(inCategory));
+
+      await ev(`[...document.querySelectorAll('.crumb-back')].find(b => b.textContent === 'Deutschland').click()`);
+      await wait(500);
+      check('Breadcrumb-Land führt zur Kategorienliste',
+        (await ev(`document.querySelectorAll('.category-item').length`)) > 0 &&
+        (await crumb()) === 'Alle Länder›Deutschland');
+
+      await pick('Sport');
+      await key('Escape');
+      await wait(500);
+      check('Esc: Liste → Kategorienliste',
+        (await ev(`document.querySelectorAll('.category-item').length`)) > 0 &&
+        (await crumb()) === 'Alle Länder›Deutschland');
+      await key('Escape');
+      await wait(500);
+      check('Esc: Kategorienliste → Länderliste',
+        (await ev(`document.querySelectorAll('.country-item').length`)) > 0 &&
+        (await ev(`window.iptv.storeGet('lastCountry')`)) == null);
 
       // Globale Suche bleibt aus der Länderliste heraus erreichbar
       await ev(`(() => {
@@ -349,8 +429,29 @@ async function run() {
       console.log('  SKIP  Länderebene-Prüfungen — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }
 
-    const chips = await json(`[...document.querySelectorAll('.cat-chip')].map(b => b.textContent)`);
-    check('Kategorie "Alle" nur einmal', chips.filter((c) => c === 'Alle').length === 1, JSON.stringify(chips));
+    const catView = await json(`({
+      names: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
+      alle: document.querySelector('.category-item .country-count')?.textContent || '',
+      topButtons: document.querySelectorAll('.sidebar-top button').length,
+      footer: document.querySelector('.sidebar-footer span')?.textContent || '',
+    })`);
+    const alleCount = Number(catView.alle.replace(/\D/g, ''));
+    check('Kategorienliste: "Alle" oben, einmal, mit Anzahl',
+      JSON.stringify(catView.names) === '["Alle","Doku","Sport"]' && catView.topButtons === 0 &&
+      alleCount === (expectCountryLevel ? Math.floor(TOTAL_CHANNELS / 4) : TOTAL_CHANNELS),
+      JSON.stringify(catView));
+    check('Fußzeile der Kategorienliste zählt die Kategorien', catView.footer === '2 Kategorien', catView.footer);
+
+    // Der Guide darf in der Kategorienliste nicht leer sein (visibleItems ist dort []).
+    await key('g');
+    const gCategoryView = await waitUntil(readGuide, (v) => v.open && v.rows > 0);
+    check('Guide zeigt in der Kategorienliste alle Kanäle',
+      gCategoryView.open && gCategoryView.rows > 0 &&
+      Number(gCategoryView.sub.replace(/\D/g, '')) === TOTAL_CHANNELS, JSON.stringify(gCategoryView));
+    await key('Escape');
+    await waitUntil(readGuide, (v) => !v.open);
+
+    await pick('Alle');
 
     check('Player ist gemountet', (await ev(`!!document.querySelector('video.video-el')`)) === true);
 
@@ -371,10 +472,60 @@ async function run() {
       video: !!document.querySelector('video.video-el'),
     })`);
     check('Suche beendet die Wiedergabe nicht', during.results && during.video, JSON.stringify(during));
+    const nameColor = await ev(`(() => { const e = document.querySelector('.result-name'); return e ? getComputedStyle(e).color : null; })()`);
+    check('Treffernamen in Textfarbe', nameColor === 'rgb(236, 236, 239)', String(nameColor));
 
     await key('Escape');
     await wait(600);
     check('Esc verlässt die Suche', (await ev(`!document.querySelector('.search-results')`)) === true);
+
+    // Suche gilt nur für den aktiven Modus
+    const setSearch = (q) => ev(`(() => {
+      const inp = document.querySelector('.search-input');
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      set.call(inp, ${JSON.stringify(q)}); inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const pill = (label) => ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+    const placeholders = {};
+    for (const [label, key] of [['Filme', 'movies'], ['Serien', 'series'], ['Live', 'live']]) {
+      await pill(label);
+      await wait(400);
+      placeholders[key] = await ev(`document.querySelector('.search-input').placeholder`);
+    }
+    check('Platzhalter passt zum Modus',
+      placeholders.live === 'Sender suchen…' && placeholders.movies === 'Filme suchen…' && placeholders.series === 'Serien suchen…',
+      JSON.stringify(placeholders));
+
+    await setSearch('Test');
+    await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+    await wait(400);
+    check('Live-Suche findet keine Filme/Serien',
+      (await ev(`document.querySelectorAll('.result-card').length`)) === 0 &&
+      (await ev(`!!document.querySelector('.search-results-empty')`)) === true);
+    await key('Escape');
+    await wait(400);
+
+    await pill('Filme');
+    await wait(500);
+    await setSearch('Kanal');
+    await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+    await wait(400);
+    const movieHitsForChannel = await ev(`document.querySelectorAll('.result-card').length`);
+    await setSearch('Testfilm');
+    await wait(600);
+    const movieSearch = await json(`({
+      cards: document.querySelectorAll('.result-card').length,
+      heads: [...document.querySelectorAll('.result-section-head')].map(e => e.textContent),
+    })`);
+    check('Filme-Suche findet nur Filme',
+      movieHitsForChannel === 0 && movieSearch.cards === 1 &&
+      movieSearch.heads.length === 1 && movieSearch.heads[0].startsWith('FILME'),
+      JSON.stringify({ movieHitsForChannel, ...movieSearch }));
+    await key('Escape');
+    await wait(400);
+    await pill('Live');
+    await wait(500);
+    await pick('Alle');
 
     await ev(`[...document.querySelectorAll('.tb-icon-pill')].find(b => b.textContent === '⚙').click()`);
     await wait(500);
@@ -473,7 +624,8 @@ async function run() {
     // das passiert, sobald Task 4 einen Länderfilter über eine tief gescrollte
     // Liste legt. Die Kanalliste ist hier noch von der vorigen Prüfung ganz nach
     // unten gescrollt; "Sport" hat ein Drittel der Einträge von "Alle".
-    await ev(`[...document.querySelectorAll('.cat-chip')].find(b => b.textContent === 'Sport').click()`);
+    await key('Escape');
+    await pick('Sport');
     await waitUntil(
       () => ev(`document.querySelectorAll('.channel-item').length`),
       (n) => n > 0,
@@ -491,21 +643,38 @@ async function run() {
       afterShrink.rows > 0 && afterShrink.topSpacerPx <= afterShrink.newSetsize * ROW_HEIGHT,
       JSON.stringify(afterShrink));
 
-    if (expectCountryLevel) {
-      // Regression: eine Kanalauswahl innerhalb desselben Landes darf den
-      // aktiven Chip nicht auf "Alle" zurücksetzen (selectChannel rief bisher
-      // bei jedem Klick/jeder Pfeiltaste selectCountry mit demselben Code auf,
-      // was den Filter unbemerkt aufhob). Der "Sport"-Chip ist von der
-      // vorigen Prüfung noch aktiv.
-      await ev(`document.querySelectorAll('.channel-item')[0].click()`);
-      await wait(500);
-      const chipAfterSelect = await ev(`document.querySelector('.cat-chip.active')?.textContent || null`);
-      check('Kanalauswahl im selben Land behält den aktiven Chip',
-        chipAfterSelect === 'Sport', String(chipAfterSelect));
-    }
+    // Regression: Klick und Pfeiltaste bleiben in der Kategorie (selectChannel
+    // setzte bisher bei jeder Auswahl zurück). "Sport" ist von oben noch offen.
+    await ev(`document.querySelectorAll('.channel-item')[0].click()`);
+    await wait(500);
+    const crumbAfterClick = await crumb();
+    await ev(`document.activeElement.blur()`);
+    await key('ArrowDown');
+    await wait(400);
+    const afterArrow = await json(`({
+      crumb: document.querySelector('.crumb')?.textContent || null,
+      active: document.querySelector('.channel-item.active .channel-name')?.textContent || null,
+    })`);
+    check('Kanalauswahl und Pfeiltaste bleiben in der Kategorie',
+      /›Sport$/.test(crumbAfterClick || '') && /›Sport$/.test(afterArrow.crumb || '') && afterArrow.active !== null,
+      JSON.stringify({ crumbAfterClick, afterArrow }));
 
-    // Zurück zu "Alle" — die restlichen Prüfungen erwarten die volle Liste.
-    await ev(`[...document.querySelectorAll('.cat-chip')].find(b => b.textContent === 'Alle').click()`);
+    // Treffer aus einer anderen Kategorie: sichtbare, markierte Zeile in "Alle".
+    // Kanal 8 ist Doku, geöffnet ist Sport.
+    await setSearch('Kanal 8');
+    await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+    await ev(`[...document.querySelectorAll('.result-card')]
+      .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 8')?.click()`);
+    const afterOtherCategory = await waitUntil(
+      () => json(`({
+        crumb: document.querySelector('.crumb')?.textContent || null,
+        active: document.querySelector('.channel-item.active .channel-name')?.textContent || null,
+      })`),
+      (v) => v.active === 'Kanal 8',
+    );
+    check('Treffer aus anderer Kategorie öffnet "Alle"',
+      /›Alle$/.test(afterOtherCategory.crumb || '') && afterOtherCategory.active === 'Kanal 8',
+      JSON.stringify(afterOtherCategory));
     await waitUntil(
       () => ev(`Number(document.querySelector('.channel-item')?.getAttribute('aria-setsize') || 0)`),
       (v) => v === setsize,
@@ -541,38 +710,100 @@ async function run() {
       check('Fußzeile zählt nur das aktive Land',
         countInCountry > 0 && countInCountry < TOTAL_CHANNELS, `${countInCountry} von ${TOTAL_CHANNELS}`);
 
-      // Regression: die Länderebene ist Live-only. Die Breadcrumb darf nicht
-      // nach Filme/Serien durchsickern, aber das gemerkte Land muss beim
-      // Zurückwechseln zu Live wieder da sein (nur die Anzeige wird
-      // ausgeblendet, activeCountry bleibt erhalten).
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+      // Das Land gilt in allen Modi: Filme/Serien zeigen es, sofern es dort
+      // vorkommt, und merken es auch, wenn nicht.
+      const sidebar = () => json(`({
+        crumb: document.querySelector('.crumb')?.textContent || null,
+        names: [...document.querySelectorAll('.channel-item:not(.category-item):not(.country-item) .channel-name')].map(e => e.textContent),
+        cats: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
+      })`);
+      await pill('Filme');
       await wait(500);
-      check('keine Breadcrumb in Filme', (await ev(`!document.querySelector('.crumb')`)) === true);
+      const movieView = await sidebar();
+      check('Filme übernimmt das Land und zeigt dessen Kategorien',
+        movieView.crumb === 'Alle Länder›Deutschland' && movieView.names.length === 0 &&
+        movieView.cats.includes('NETFLIX MOVIES') &&
+        !movieView.cats.includes('Weiter') && !movieView.cats.includes('Favoriten'),
+        JSON.stringify(movieView));
+      await pick('Alle');
+      const movieAll = await sidebar();
+      check('Filme: "Alle" zeigt alle Titel des Landes',
+        movieAll.names.length > 0 && movieAll.names.every((n) => n.startsWith('DE - ')),
+        JSON.stringify(movieAll));
 
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Live').click()`);
+      await pill('Live');
       await wait(500);
       check('Breadcrumb ist nach Rückkehr zu Live wieder da',
-        /Deutschland/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
+        /Deutschland/.test((await crumb()) || '') &&
+        (await ev(`document.querySelectorAll('.category-item').length`)) > 0);
 
-      // Regression: ein Live-Treffer, der aus Filme/Serien heraus angeklickt
-      // wird, muss die Leiste in das Land DES KANALS tragen. selectChannel
-      // prüfte dafür `countryMode`, das direkt nach switchMode('live') noch
-      // render-alt false ist — Ergebnis: Breadcrumb "Deutschland", ein
-      // französischer Kanal läuft, keine markierte Zeile, und lastChannel/
-      // lastCountry laufen auf der Platte auseinander. "Kanal 7" ist in den
-      // Fixtures FR.
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+      await pill('Serien');
       await wait(500);
-      await ev(`(() => {
-        const inp = document.querySelector('.search-input');
-        const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        set.call(inp, 'Kanal 7'); inp.dispatchEvent(new Event('input', { bubbles: true }));
-      })()`);
+      const seriesView = await sidebar();
+      check('Serien zeigt das gemerkte Land',
+        JSON.stringify(seriesView.cats) === '["Alle","GERMANY NETFLIX"]', JSON.stringify(seriesView));
+      await pick('GERMANY NETFLIX');
+      const seriesList = await sidebar();
+      check('Serien: Kategorie zeigt ihre Titel',
+        JSON.stringify(seriesList.names) === '["DE - Haustausch (2026) (SE)"]' &&
+        seriesList.crumb === 'Alle Länder›Deutschland›GERMANY NETFLIX', JSON.stringify(seriesList));
+
+      await ev(`document.querySelector('.crumb-back').click()`);
+      await wait(500);
+      const seriesCountries = await json(`[...document.querySelectorAll('.country-item .channel-name')].map(e => e.textContent)`);
+      check('Länderliste in Serien',
+        seriesCountries.includes('Deutschland') && seriesCountries.includes('Sonstige') &&
+        !seriesCountries.includes('Favoriten') &&
+        (await ev(`window.iptv.storeGet('lastCountry')`)) == null,
+        JSON.stringify(seriesCountries));
+
+      await pill('Live');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Türkei')).click()`);
+      await wait(500);
+      await pill('Filme');
+      await wait(500);
+      const noMovies = await json(`({
+        items: document.querySelectorAll('.country-item').length,
+        crumb: !!document.querySelector('.crumb'),
+        weiter: [...document.querySelectorAll('.country-item')].find(e => e.textContent.includes('Weiter'))?.querySelector('.country-count')?.textContent || null,
+      })`);
+      check('Land ohne Filme zeigt die Länderliste',
+        noMovies.items > 0 && noMovies.crumb === false && noMovies.weiter === '1', JSON.stringify(noMovies));
+
+      await pill('Live');
+      await wait(500);
+      check('gemerktes Land überlebt einen Modus ohne dieses Land',
+        /Türkei/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
+
+      await pill('Filme');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Weiter')).click()`);
+      await wait(500);
+      const continueView = await sidebar();
+      check('Weiter-Eintrag zeigt angefangene Filme',
+        /Weiter/.test(continueView.crumb || '') && JSON.stringify(continueView.names) === '["Testfilm"]' &&
+        continueView.cats.length === 0,
+        JSON.stringify(continueView));
+
+      await pill('Live');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Deutschland')).click()`);
+      await wait(500);
+
+      // Regression: ein Live-Treffer aus einem anderen Land muss die Leiste in
+      // das Land DES KANALS tragen (Breadcrumb, aktive Zeile, lastCountry).
+      // Gesucht wird im ganzen Modus, nicht nur im gewählten Land. "Kanal 7"
+      // ist in den Fixtures FR, gewählt ist hier Deutschland. Die Leiste landet
+      // in "Alle" des Ziellandes, damit die Zeile sichtbar und markiert ist.
+      await setSearch('Kanal 7');
       await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      const heads = await json(`[...document.querySelectorAll('.result-section-head')].map(e => e.textContent.split(' ')[0])`);
       const clickedHit = await ev(`(() => {
-        const sec = [...document.querySelectorAll('.result-section')]
-          .find(s => s.textContent.startsWith('SENDER'));
-        const hit = [...(sec?.querySelectorAll('.result-card') || [])]
+        const hit = [...document.querySelectorAll('.result-card')]
           .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 7');
         if (!hit) return false;
         hit.click();
@@ -584,12 +815,82 @@ async function run() {
           active: document.querySelector('.channel-item.active .channel-name')?.textContent || null,
           tag: document.querySelector('.live-tag-text')?.textContent || null,
         })`),
-        (v) => /Frankreich/.test(v.crumb || '') && v.active === 'Kanal 7',
+        (v) => v.crumb === 'Alle Länder›Frankreich›Alle' && v.active === 'Kanal 7',
       );
-      check('Live-Treffer aus Filme trägt in das Land des Kanals',
-        clickedHit === true && /Frankreich/.test(afterHit.crumb || '') && afterHit.active === 'Kanal 7' &&
-        /Kanal 7$/.test(afterHit.tag || ''),
-        JSON.stringify(afterHit));
+      const storedCountry = await waitUntil(() => ev(`window.iptv.storeGet('lastCountry')`), (v) => v === 'FR');
+      check('Live-Treffer trägt in das Land des Kanals',
+        JSON.stringify(heads) === '["SENDER"]' && clickedHit === true &&
+        afterHit.crumb === 'Alle Länder›Frankreich›Alle' && afterHit.active === 'Kanal 7' &&
+        /Kanal 7$/.test(afterHit.tag || '') && storedCountry === 'FR',
+        JSON.stringify({ heads, afterHit, storedCountry }));
+
+      // Regression: ein Film-Treffer springt nach "Alle" des Landes (nicht in die
+      // Kategorienliste), der Titel ist markiert.
+      await ev(`[...document.querySelectorAll('.crumb-back')].find(b => b.textContent === 'Alle Länder').click()`);
+      await wait(300);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Deutschland')).click()`);
+      await wait(300);
+      await pill('Filme');
+      await wait(500);
+      await pick('NETFLIX MOVIES');
+      await setSearch('Street');
+      await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      await ev(`[...document.querySelectorAll('.result-card')]
+        .find(c => c.querySelector('.result-name')?.textContent === 'DE - Street Fighter (2026)').click()`);
+      const afterMovieHit = await waitUntil(
+        () => json(`({
+          crumb: document.querySelector('.crumb')?.textContent || null,
+          active: document.querySelector('.channel-item.active .channel-name')?.textContent || null,
+        })`),
+        (v) => v.active !== null,
+      );
+      check('Film-Treffer springt nach "Alle" und markiert den Titel',
+        afterMovieHit.crumb === 'Alle Länder›Deutschland›Alle' &&
+        afterMovieHit.active === 'DE - Street Fighter (2026)', JSON.stringify(afterMovieHit));
+
+      // Regression: ein per Suche gewählter Sender weit hinten in der Liste muss
+      // ins Bild scrollen, auch wenn die Liste im selben Zug erst entsteht
+      // (Kategorienliste → "Alle"). Kanal 416 ist der letzte DE-Kanal der 420.
+      await pill('Live');
+      await wait(500);
+      await setSearch('Kanal 416');
+      await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      await ev(`[...document.querySelectorAll('.result-card')]
+        .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 416').click()`);
+      const farHit = await waitUntil(
+        () => json(`(() => {
+          const row = document.querySelector('.channel-item.active');
+          const box = document.querySelector('ul.channel-list')?.getBoundingClientRect();
+          const r = row?.getBoundingClientRect();
+          return {
+            active: row?.querySelector('.channel-name')?.textContent || null,
+            // Zeilenmitte im Sichtbereich (die Zeilenhöhen-Schätzung kann um ein paar px abweichen)
+            visible: !!(r && box && (r.top + r.bottom) / 2 > box.top && (r.top + r.bottom) / 2 < box.bottom),
+          };
+        })()`),
+        (v) => v.active === 'Kanal 416' && v.visible, 2000);
+      check('gesuchter Sender weit hinten wird ins Bild gescrollt',
+        farHit.active === 'Kanal 416' && farHit.visible, JSON.stringify(farHit));
+
+      // Regression: "Weiter" wird beim Länderwechsel aufgefrischt. Der Verlauf
+      // ändert sich hier von außen (wie beim Zu-Ende-Schauen), die Liste muss
+      // beim Öffnen von "Weiter" den neuen Stand zeigen statt des alten.
+      await pill('Filme');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.crumb-back')].find(b => b.textContent === 'Alle Länder').click()`);
+      await wait(300);
+      await ev(`window.iptv.storeSet('watchHistory', {})`);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Weiter')).click()`);
+      const refreshed = await waitUntil(
+        () => json(`({
+          weiterItem: [...document.querySelectorAll('.country-item')].some(e => e.textContent.includes('Weiter')),
+          names: [...document.querySelectorAll('.channel-item:not(.category-item):not(.country-item) .channel-name')].map(e => e.textContent),
+        })`),
+        (v) => v.names.length === 0, 2000);
+      check('Weiter zeigt nach Verlaufsänderung den neuen Stand',
+        refreshed.names.length === 0 && refreshed.weiterItem === false, JSON.stringify(refreshed));
     } else {
       console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }
@@ -599,6 +900,31 @@ async function run() {
     check('ohne Präfixe keine Länderebene',
       (await ev(`document.querySelectorAll('.country-item').length`)) === 0 &&
       (await ev(`document.querySelectorAll('.channel-item').length`)) > 0);
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+    await wait(500);
+    check('ohne Präfixe keine Länderebene in Filme',
+      (await ev(`document.querySelectorAll('.country-item').length`)) === 0);
+    const noCountryCats = await json(`({
+      names: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
+      crumb: document.querySelector('.crumb')?.textContent || null,
+    })`);
+    check('ohne Präfixe: Weiter/Favoriten in der Kategorienliste',
+      JSON.stringify(noCountryCats.names) === '["Weiter","Alle","Action","NETFLIX MOVIES"]' && noCountryCats.crumb === null,
+      JSON.stringify(noCountryCats));
+    await pick('Weiter');
+    const continueNoCountry = await json(`({
+      crumb: document.querySelector('.crumb')?.textContent || null,
+      names: [...document.querySelectorAll('.channel-item:not(.category-item) .channel-name')].map(e => e.textContent),
+    })`);
+    check('ohne Präfixe: Weiter zeigt angefangene Filme',
+      continueNoCountry.crumb === 'Alle Kategorien›Weiter' && JSON.stringify(continueNoCountry.names) === '["Testfilm"]',
+      JSON.stringify(continueNoCountry));
+    await ev(`document.querySelector('.crumb-back').click()`);
+    await wait(500);
+    await key('Escape');
+    await wait(500);
+    check('Esc auf der ersten Ebene bleibt stehen',
+      (await ev(`document.querySelectorAll('.category-item').length`)) > 0 && (await crumb()) === null);
   }
 
   const exceptions = events

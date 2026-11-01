@@ -27,14 +27,14 @@ function currentTitle(epg, ch, now) {
 }
 
 export default function Sidebar({
-  mode, items, groups, activeGroup, onGroupChange,
+  mode, items,
   activeItemId, onItemSelect,
   favorites, onToggleFavorite,
   globalQuery, onGlobalSearch,
-  totalCount, epgReady, epg, listLoading,
-  countryView, countries, countryName, favoriteCount, onSelectCountry, onLeaveCountry,
+  epgReady, epg, listLoading,
+  countryView, countries, countryName, favoriteCount, continueCount, onSelectCountry, onLeaveCountry,
+  categoryView, categories, allCount, groupName, onSelectGroup, onLeaveGroup,
 }) {
-  const activeCatRef = useRef(null);
   const isLive = mode === 'live';
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
   const [now, setNow] = useState(() => new Date());
@@ -64,13 +64,16 @@ export default function Sidebar({
     if (scrolledToRef.current === activeItemId) return;
     const i = items.findIndex((it) => it.id === activeItemId);
     if (i < 0) return; // noch nicht in der Liste — beim nächsten items-Wechsel erneut
-    scrolledToRef.current = activeItemId;
-    scrollToIndex(i);
+    // Erst merken, wenn wirklich gescrollt wurde: beim Wechsel Kategorienliste →
+    // "Alle" mountet die <ul> im selben Commit, el ist im Effekt noch null.
+    if (scrollToIndex(i)) scrolledToRef.current = activeItemId;
   }, [activeItemId, items, scrollToIndex]);
 
-  useEffect(() => {
-    activeCatRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [activeGroup]);
+  // "Alle" ist app-eigen und steht immer oben; Kategorien tragen ihren Namen als Code.
+  const categoryEntries = useMemo(() => [
+    { code: 'Alle', name: 'Alle', flag: '≡', count: allCount },
+    ...categories.map((c) => ({ code: c.name, name: c.name, flag: '#', count: c.count })),
+  ], [allCount, categories]);
 
   // Resolve the current programme per visible row once — this scans the EPG for
   // only the rows currently on screen and must not run on every unrelated render.
@@ -85,7 +88,7 @@ export default function Sidebar({
     setBrokenLogos((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }
 
-  // Bleibt in beiden Ansichten die unveränderte globale Suche — steht in einer
+  // Suche im aktiven Modus, in beiden Ansichten gleich — steht in einer
   // lokalen Variable, damit das Suchfeld nicht doppelt im Code steht.
   const searchBox = (
     <div className="sidebar-search">
@@ -96,20 +99,44 @@ export default function Sidebar({
       <input
         className="search-input"
         type="search"
-        placeholder="Filme, Serien & Sender…"
+        placeholder={isLive ? 'Sender suchen…' : mode === 'movies' ? 'Filme suchen…' : 'Serien suchen…'}
         value={globalQuery}
         onChange={(e) => onGlobalSearch(e.target.value)}
       />
     </div>
   );
 
-  if (countryView) {
+  // Breadcrumb wie searchBox als lokale Variable. Mit Länderebene: Alle Länder ›
+  // Land › Kategorie; ohne: Alle Kategorien › Kategorie. Die aktuelle Ebene ist
+  // fett, jede darüber führt eine Ebene zurück.
+  const crumb = !countryView && (countryName || groupName) && (
+    <div className="crumb">
+      {countryName
+        ? <button className="crumb-back" onClick={onLeaveCountry}>Alle Länder</button>
+        : <button className="crumb-back" onClick={onLeaveGroup}>Alle Kategorien</button>}
+      <span className="crumb-sep">›</span>
+      {countryName && groupName && (
+        <>
+          <button className="crumb-back" onClick={onLeaveGroup}>{countryName}</button>
+          <span className="crumb-sep">›</span>
+        </>
+      )}
+      <b>{groupName || countryName}</b>
+    </div>
+  );
+
+  if (countryView || categoryView) {
     return (
       <aside className="sidebar">
+        {crumb}
         <div className="sidebar-top">{searchBox}</div>
-        <CountryList countries={countries} favoriteCount={favoriteCount} onSelect={onSelectCountry} />
+        {countryView ? (
+          <CountryList countries={countries} favoriteCount={favoriteCount} continueCount={continueCount} onSelect={onSelectCountry} />
+        ) : (
+          <CountryList kind="category" countries={categoryEntries} favoriteCount={favoriteCount} continueCount={continueCount} onSelect={onSelectGroup} />
+        )}
         <div className="sidebar-footer">
-          <span>{countries.length} Länder</span>
+          <span>{countryView ? `${countries.length} Länder` : listLoading ? 'lädt…' : `${categories.length} Kategorien`}</span>
           <span>{epgReady ? 'EPG ✓' : 'EPG …'}</span>
         </div>
       </aside>
@@ -118,30 +145,8 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
-      {countryName && (
-        <div className="crumb">
-          <button className="crumb-back" onClick={onLeaveCountry}>Alle Länder</button>
-          <span className="crumb-sep">›</span>
-          <b>{countryName}</b>
-        </div>
-      )}
-      <div className="sidebar-top">
-        {searchBox}
-
-        <div className="chiprow">
-          {groups.map((g) => (
-            <button
-              key={g}
-              ref={activeGroup === g ? activeCatRef : null}
-              className={`cat-chip ${activeGroup === g ? 'active' : ''}`}
-              onClick={() => onGroupChange(g)}
-              title={g}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-      </div>
+      {crumb}
+      <div className="sidebar-top">{searchBox}</div>
 
       <ul
         className="channel-list"
@@ -202,7 +207,7 @@ export default function Sidebar({
       </ul>
 
       <div className="sidebar-footer">
-        <span>{(totalCount ?? 0).toLocaleString('de-DE')} {isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}</span>
+        <span>{items.length.toLocaleString('de-DE')} {isLive ? 'Kanäle' : mode === 'movies' ? 'Filme' : 'Serien'}</span>
         <span>{epgReady ? 'EPG ✓' : 'EPG …'}</span>
       </div>
     </aside>

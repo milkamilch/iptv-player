@@ -3,6 +3,7 @@
 
 export const OTHER = '__other__';
 export const FAVORITES = '__fav__';
+export const CONTINUE = '__continue__';
 
 // Nur Codes aus dieser Tabelle gelten als Land. Alles andere landet in "Sonstige",
 // damit Präfixe wie "HD", "VIP" oder "4K" keine Fantasieländer erzeugen.
@@ -55,12 +56,18 @@ export function parseCategory(group) {
 }
 
 /** Ein Durchlauf über alle Kanäle: Zählung, sortierte Länderliste, Metadaten je Kanal. */
-export function buildCountryIndex(channels) {
+// titlePrefix: VOD-Kategorien tragen selten ein Präfix, die Titel fast immer.
+// Die Kategorie für die Chips bleibt trotzdem die Kategorie, nie der Titel.
+export function buildCountryIndex(channels, { titlePrefix = false } = {}) {
   const meta = new Map();
   const counts = new Map();
 
   for (const ch of channels || []) {
-    const parsed = parseCategory(ch.group);
+    let parsed = parseCategory(ch.group);
+    if (titlePrefix && parsed.code === OTHER) {
+      const fromTitle = parseCategory(ch.name);
+      if (fromTitle.code !== OTHER) parsed = { code: fromTitle.code, category: parsed.category };
+    }
     meta.set(ch.id, parsed);
     counts.set(parsed.code, (counts.get(parsed.code) || 0) + 1);
   }
@@ -78,12 +85,14 @@ export function buildCountryIndex(channels) {
   return { enabled: countries.length > 1, countries, meta };
 }
 
-/** Gekürzte Kategorienamen eines Landes, ohne Duplikate. */
-export function categoriesOf(index, channels, code) {
-  const seen = new Set();
-  for (const ch of channels || []) {
-    const m = index.meta.get(ch.id);
-    if (m && m.code === code && m.category) seen.add(m.category);
+/** Zählt Einträge je Kategorie, deutsch sortiert; categoryOf liefert null/'' für "nicht dabei". */
+export function categoryCounts(items, categoryOf) {
+  const counts = new Map();
+  for (const it of items || []) {
+    const name = categoryOf(it);
+    if (name) counts.set(name, (counts.get(name) || 0) + 1);
   }
-  return [...seen].sort((a, b) => a.localeCompare(b, 'de'));
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }

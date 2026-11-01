@@ -5,6 +5,9 @@ const store = JSON.parse(process.env.TEST_STORE || '{}');
 const CHANNEL_COUNT = Number(process.env.TEST_CHANNELS || 420);
 const PREFIXED = process.env.TEST_PREFIXED !== '0';
 const LANDS = ['DE', 'US', 'TR', 'FR'];
+// Verzögert Filme/Serien, damit Eingaben in der Ladephase testbar sind.
+const VOD_DELAY = Number(process.env.TEST_VOD_DELAY || 0);
+const delayed = (v) => new Promise((r) => setTimeout(() => r(v), VOD_DELAY));
 
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
@@ -69,8 +72,18 @@ const epg = {};
 }
 
 // rating '0' bedeutet "nicht bewertet" und darf nicht als "* 0" erscheinen
-const movies = [{ id: '900', name: 'Testfilm', group: 'Action', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' }];
-const series = [{ id: '800', name: 'Testserie', group: 'Drama', logo: '', type: 'series' }];
+// Titel tragen das Land als Präfix, die Kategorien nicht (wie beim echten Anbieter).
+// Testfilm/Testserie bleiben ohne Präfix und landen in "Sonstige".
+const vod = (c, n) => PREFIXED ? `${c} - ${n}` : n;
+const movies = [
+  { id: '900', name: 'Testfilm', group: 'Action', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+  { id: '901', name: vod('DE', 'Street Fighter (2026)'), group: 'NETFLIX MOVIES', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+  { id: '902', name: vod('EN', 'Street Fighter (2026)'), group: 'NETFLIX MOVIES', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+];
+const series = [
+  { id: '800', name: 'Testserie', group: 'Drama', logo: '', type: 'series' },
+  { id: '801', name: vod('DE', 'Haustausch (2026) (SE)'), group: 'GERMANY NETFLIX', logo: '', type: 'series' },
+];
 
 contextBridge.exposeInMainWorld('iptv', {
   storeGet: async (k) => store[k],
@@ -80,8 +93,8 @@ contextBridge.exposeInMainWorld('iptv', {
   secureDecrypt: async (v) => v,
   fetchXtream: async () => ({ user_info: { auth: 1 } }),
   loadXtreamChannels: async () => chans,
-  loadXtreamVod: async () => movies,
-  loadXtreamSeries: async () => series,
+  loadXtreamVod: () => delayed(movies),
+  loadXtreamSeries: () => delayed(series),
   loadXtreamVodInfo: async () => ({ plot: 'p', rating: '0', containerExt: 'mp4' }),
   loadXtreamSeriesInfo: async () => ({ info: {}, seasons: [] }),
   loadXMLTVUrl: async () => epg,

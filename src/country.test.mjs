@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCategory, buildCountryIndex, categoriesOf, OTHER } from './country.mjs';
+import { parseCategory, buildCountryIndex, categoryCounts, OTHER } from './country.mjs';
 
 test('erkennt Präfixe mit allen Trennzeichen', () => {
   for (const sep of ['|', '-', ':', '/', '>']) {
@@ -71,8 +71,90 @@ test('enabled ist false, wenn sich nur ein Eimer ergibt', () => {
   assert.equal(buildCountryIndex([]).enabled, false);
 });
 
-test('categoriesOf liefert gekürzte Namen ohne Duplikate, deutsch sortiert', () => {
+test('categoryCounts zählt je Kategorie, deutsch sortiert', () => {
+  const items = ['Sport', 'Österreich-Spezial', 'Sport', 'Nachrichten'].map((g, i) => ({ id: String(i), group: g }));
+  assert.deepEqual(categoryCounts(items, (c) => c.group), [
+    { name: 'Nachrichten', count: 1 },
+    { name: 'Österreich-Spezial', count: 1 },
+    { name: 'Sport', count: 2 },
+  ]);
+});
+
+test('categoryCounts überspringt leere Kategorien', () => {
+  const items = [{ id: '1' }, { id: '2' }, { id: '3' }];
+  const values = [null, '', undefined];
+  assert.deepEqual(categoryCounts(items, (c) => values[Number(c.id) - 1]), []);
+});
+
+test('categoryCounts über Index-Metadaten zählt nur das Land', () => {
   const chans = [...CHANNELS, { id: '6', group: 'DE | Sport' }, { id: '7', group: 'DE | Österreich-Spezial' }];
   const idx = buildCountryIndex(chans);
-  assert.deepEqual(categoriesOf(idx, chans, 'DE'), ['Nachrichten', 'Österreich-Spezial', 'Sport']);
+  const cats = categoryCounts(chans, (c) => {
+    const m = idx.meta.get(c.id);
+    return m.code === 'DE' ? m.category : null;
+  });
+  assert.deepEqual(cats.map((c) => c.name), ['Nachrichten', 'Österreich-Spezial', 'Sport']);
+  assert.deepEqual(cats.map((c) => c.count), [1, 1, 2]);
+});
+
+test('Titelpräfix liefert das Land ohne Kategoriepräfix', () => {
+  const item = { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: 'DE', category: 'GERMANY NETFLIX' });
+});
+
+test('Kategoriepräfix gewinnt gegen den Titelpräfix', () => {
+  const item = { id: '1', name: 'FR - X', group: 'DE | Kino' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: 'DE', category: 'Kino' });
+});
+
+test('EN im Titel ist kein Land', () => {
+  const item = { id: '1', name: 'EN - Street Fighter (2026)', group: 'NETFLIX MOVIES' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: OTHER, category: 'NETFLIX MOVIES' });
+});
+
+test('ohne Option bleibt der Titel unbeachtet', () => {
+  const item = { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' };
+  const index = buildCountryIndex([item]);
+  assert.deepEqual(index.meta.get('1'), { code: OTHER, category: 'GERMANY NETFLIX' });
+});
+
+test('unbekannte oder fehlende Titelpräfixe landen in Sonstige', () => {
+  const items = [
+    { id: '1', name: 'NF - Foo', group: 'X' },
+    { id: '2', name: '4K - Bar', group: 'X' },
+    { id: '3', group: 'X' },
+  ];
+  const index = buildCountryIndex(items, { titlePrefix: true });
+  for (const it of items) assert.equal(index.meta.get(it.id).code, OTHER);
+});
+
+test('categoryCounts liefert beim Titel-Land die Kategorie, nicht den Titel', () => {
+  const items = [
+    { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' },
+    { id: '2', name: 'DE - Street Fighter (2026)', group: 'NETFLIX MOVIES' },
+  ];
+  const index = buildCountryIndex(items, { titlePrefix: true });
+  assert.deepEqual(categoryCounts(items, (c) => index.meta.get(c.id).category), [
+    { name: 'GERMANY NETFLIX', count: 1 },
+    { name: 'NETFLIX MOVIES', count: 1 },
+  ]);
+});
+
+test('Index über 200.000 Titel dauert unter einer Sekunde', () => {
+  const items = Array.from({ length: 200000 }, (_, i) => ({
+    id: String(i), name: `${i % 2 ? 'DE' : 'FR'} - Titel ${i}`, group: 'NETFLIX MOVIES',
+  }));
+  const t0 = performance.now();
+  buildCountryIndex(items, { titlePrefix: true });
+  assert.ok(performance.now() - t0 < 1000);
+});
+
+test('categoryCounts über 200.000 Titel dauert unter einer Sekunde', () => {
+  const items = Array.from({ length: 200000 }, (_, i) => ({ id: String(i), group: `Kategorie ${i % 300}` }));
+  const t0 = performance.now();
+  categoryCounts(items, (c) => c.group);
+  assert.ok(performance.now() - t0 < 1000);
 });
