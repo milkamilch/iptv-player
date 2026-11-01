@@ -270,9 +270,10 @@ export default function App() {
   function handleSearchSelect(type, item) {
     // Kein switchMode: der Modus stimmt (Suche gilt nur für ihn) und es würde
     // die Kategorie, die selectChannel gerade setzt, wieder zurücksetzen.
+    // "Alle", damit der Titel in der Liste sichtbar und markiert ist.
     if (type === 'live')        selectChannel(item);
-    else if (type === 'movie')  { setMode('movies'); setActiveGroup(null); openDetail('movie', item); }
-    else if (type === 'series') { setMode('series'); setActiveGroup(null); openDetail('series', item); }
+    else if (type === 'movie')  { setActiveGroup('Alle'); openDetail('movie', item); }
+    else if (type === 'series') { setActiveGroup('Alle'); openDetail('series', item); }
     setGlobalQuery('');
   }
 

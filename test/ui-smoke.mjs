@@ -793,6 +793,31 @@ async function run() {
         afterHit.crumb === 'Alle Länder›Frankreich›Alle' && afterHit.active === 'Kanal 7' &&
         /Kanal 7$/.test(afterHit.tag || '') && storedCountry === 'FR',
         JSON.stringify({ heads, afterHit, storedCountry }));
+
+      // Regression: ein Film-Treffer springt nach "Alle" des Landes (nicht in die
+      // Kategorienliste), der Titel ist markiert.
+      await ev(`[...document.querySelectorAll('.crumb-back')].find(b => b.textContent === 'Alle Länder').click()`);
+      await wait(300);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Deutschland')).click()`);
+      await wait(300);
+      await pill('Filme');
+      await wait(500);
+      await pick('NETFLIX MOVIES');
+      await setSearch('Street');
+      await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      await ev(`[...document.querySelectorAll('.result-card')]
+        .find(c => c.querySelector('.result-name')?.textContent === 'DE - Street Fighter (2026)').click()`);
+      const afterMovieHit = await waitUntil(
+        () => json(`({
+          crumb: document.querySelector('.crumb')?.textContent || null,
+          active: document.querySelector('.channel-item.active .channel-name')?.textContent || null,
+        })`),
+        (v) => v.active !== null,
+      );
+      check('Film-Treffer springt nach "Alle" und markiert den Titel',
+        afterMovieHit.crumb === 'Alle Länder›Deutschland›Alle' &&
+        afterMovieHit.active === 'DE - Street Fighter (2026)', JSON.stringify(afterMovieHit));
     } else {
       console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }
