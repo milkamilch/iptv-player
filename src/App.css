@@ -492,6 +492,7 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid var(--border-soft);
   border-radius: 12px;
+  color: var(--text);
   cursor: pointer;
   text-align: left;
   transition: background 0.12s, border-color 0.12s;

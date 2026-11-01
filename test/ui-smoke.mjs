@@ -371,6 +371,8 @@ async function run() {
       video: !!document.querySelector('video.video-el'),
     })`);
     check('Suche beendet die Wiedergabe nicht', during.results && during.video, JSON.stringify(during));
+    const nameColor = await ev(`(() => { const e = document.querySelector('.result-name'); return e ? getComputedStyle(e).color : null; })()`);
+    check('Treffernamen in Textfarbe', nameColor === 'rgb(236, 236, 239)', String(nameColor));
 
     await key('Escape');
     await wait(600);
