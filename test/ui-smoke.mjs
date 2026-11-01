@@ -378,6 +378,53 @@ async function run() {
     await wait(600);
     check('Esc verlässt die Suche', (await ev(`!document.querySelector('.search-results')`)) === true);
 
+    // Suche gilt nur für den aktiven Modus
+    const setSearch = (q) => ev(`(() => {
+      const inp = document.querySelector('.search-input');
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      set.call(inp, ${JSON.stringify(q)}); inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const pill = (label) => ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+    const placeholders = {};
+    for (const [label, key] of [['Filme', 'movies'], ['Serien', 'series'], ['Live', 'live']]) {
+      await pill(label);
+      await wait(400);
+      placeholders[key] = await ev(`document.querySelector('.search-input').placeholder`);
+    }
+    check('Platzhalter passt zum Modus',
+      placeholders.live === 'Sender suchen…' && placeholders.movies === 'Filme suchen…' && placeholders.series === 'Serien suchen…',
+      JSON.stringify(placeholders));
+
+    await setSearch('Test');
+    await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+    await wait(400);
+    check('Live-Suche findet keine Filme/Serien',
+      (await ev(`document.querySelectorAll('.result-card').length`)) === 0 &&
+      (await ev(`!!document.querySelector('.search-results-empty')`)) === true);
+    await key('Escape');
+    await wait(400);
+
+    await pill('Filme');
+    await wait(500);
+    await setSearch('Kanal');
+    await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+    await wait(400);
+    const movieHitsForChannel = await ev(`document.querySelectorAll('.result-card').length`);
+    await setSearch('Testfilm');
+    await wait(600);
+    const movieSearch = await json(`({
+      cards: document.querySelectorAll('.result-card').length,
+      heads: [...document.querySelectorAll('.result-section-head')].map(e => e.textContent),
+    })`);
+    check('Filme-Suche findet nur Filme',
+      movieHitsForChannel === 0 && movieSearch.cards === 1 &&
+      movieSearch.heads.length === 1 && movieSearch.heads[0].startsWith('FILME'),
+      JSON.stringify({ movieHitsForChannel, ...movieSearch }));
+    await key('Escape');
+    await wait(400);
+    await pill('Live');
+    await wait(500);
+
     await ev(`[...document.querySelectorAll('.tb-icon-pill')].find(b => b.textContent === '⚙').click()`);
     await wait(500);
     const sOpen = await ev(`!!document.querySelector('.settings-box')`);
@@ -556,25 +603,15 @@ async function run() {
       check('Breadcrumb ist nach Rückkehr zu Live wieder da',
         /Deutschland/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
 
-      // Regression: ein Live-Treffer, der aus Filme/Serien heraus angeklickt
-      // wird, muss die Leiste in das Land DES KANALS tragen. selectChannel
-      // prüfte dafür `countryMode`, das direkt nach switchMode('live') noch
-      // render-alt false ist — Ergebnis: Breadcrumb "Deutschland", ein
-      // französischer Kanal läuft, keine markierte Zeile, und lastChannel/
-      // lastCountry laufen auf der Platte auseinander. "Kanal 7" ist in den
-      // Fixtures FR.
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
-      await wait(500);
-      await ev(`(() => {
-        const inp = document.querySelector('.search-input');
-        const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-        set.call(inp, 'Kanal 7'); inp.dispatchEvent(new Event('input', { bubbles: true }));
-      })()`);
+      // Regression: ein Live-Treffer aus einem anderen Land muss die Leiste in
+      // das Land DES KANALS tragen (Breadcrumb, aktive Zeile, lastCountry).
+      // Gesucht wird im ganzen Modus, nicht nur im gewählten Land. "Kanal 7"
+      // ist in den Fixtures FR, gewählt ist hier Deutschland.
+      await setSearch('Kanal 7');
       await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      const heads = await json(`[...document.querySelectorAll('.result-section-head')].map(e => e.textContent.split(' ')[0])`);
       const clickedHit = await ev(`(() => {
-        const sec = [...document.querySelectorAll('.result-section')]
-          .find(s => s.textContent.startsWith('SENDER'));
-        const hit = [...(sec?.querySelectorAll('.result-card') || [])]
+        const hit = [...document.querySelectorAll('.result-card')]
           .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 7');
         if (!hit) return false;
         hit.click();
@@ -588,10 +625,12 @@ async function run() {
         })`),
         (v) => /Frankreich/.test(v.crumb || '') && v.active === 'Kanal 7',
       );
-      check('Live-Treffer aus Filme trägt in das Land des Kanals',
-        clickedHit === true && /Frankreich/.test(afterHit.crumb || '') && afterHit.active === 'Kanal 7' &&
-        /Kanal 7$/.test(afterHit.tag || ''),
-        JSON.stringify(afterHit));
+      const storedCountry = await waitUntil(() => ev(`window.iptv.storeGet('lastCountry')`), (v) => v === 'FR');
+      check('Live-Treffer trägt in das Land des Kanals',
+        JSON.stringify(heads) === '["SENDER"]' && clickedHit === true &&
+        /Frankreich/.test(afterHit.crumb || '') && afterHit.active === 'Kanal 7' &&
+        /Kanal 7$/.test(afterHit.tag || '') && storedCountry === 'FR',
+        JSON.stringify({ heads, afterHit, storedCountry }));
     } else {
       console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }

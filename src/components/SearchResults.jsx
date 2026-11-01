@@ -31,29 +31,25 @@ function Section({ title, type, items, loading, onSelect }) {
   );
 }
 
-export default function SearchResults({ query, live, movies, series, moviesLoading, seriesLoading, onSelect }) {
-  const q = query.trim().toLowerCase();
-  const match = (arr) => arr.filter((it) => it.name.toLowerCase().includes(q));
+const SECTIONS = { live: ['SENDER', 'live'], movies: ['FILME', 'movie'], series: ['SERIEN', 'series'] };
 
-  const senderHits = q ? match(live) : [];
-  const filmHits   = q ? match(movies) : [];
-  const serienHits = q ? match(series) : [];
-  const total = senderHits.length + filmHits.length + serienHits.length;
+export default function SearchResults({ query, mode, items, loading, onSelect }) {
+  const q = query.trim().toLowerCase();
+  const hits = q ? items.filter((it) => it.name.toLowerCase().includes(q)) : [];
+  const [title, type] = SECTIONS[mode];
 
   return (
     <div className="search-results">
       <div className="search-results-head">
         Suche: <strong>„{query}"</strong>
-        <span className="search-results-total">{total} Treffer</span>
+        <span className="search-results-total">{hits.length} Treffer</span>
       </div>
 
-      {total === 0 && !moviesLoading && !seriesLoading && (
+      {hits.length === 0 && !loading && (
         <div className="search-results-empty">Keine Treffer für „{query}"</div>
       )}
 
-      <Section title="SENDER"  type="live"   items={senderHits} loading={false}         onSelect={onSelect} />
-      <Section title="FILME"   type="movie"  items={filmHits}   loading={moviesLoading} onSelect={onSelect} />
-      <Section title="SERIEN"  type="series" items={serienHits} loading={seriesLoading} onSelect={onSelect} />
+      <Section title={title} type={type} items={hits} loading={loading} onSelect={onSelect} />
     </div>
   );
 }

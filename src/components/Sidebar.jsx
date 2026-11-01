@@ -85,7 +85,7 @@ export default function Sidebar({
     setBrokenLogos((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }
 
-  // Bleibt in beiden Ansichten die unveränderte globale Suche — steht in einer
+  // Suche im aktiven Modus, in beiden Ansichten gleich — steht in einer
   // lokalen Variable, damit das Suchfeld nicht doppelt im Code steht.
   const searchBox = (
     <div className="sidebar-search">
@@ -96,7 +96,7 @@ export default function Sidebar({
       <input
         className="search-input"
         type="search"
-        placeholder="Filme, Serien & Sender…"
+        placeholder={isLive ? 'Sender suchen…' : mode === 'movies' ? 'Filme suchen…' : 'Serien suchen…'}
         value={globalQuery}
         onChange={(e) => onGlobalSearch(e.target.value)}
       />

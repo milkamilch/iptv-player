@@ -13,8 +13,7 @@ Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
 - **Live-TV** — Kanäle über die Xtream-Codes-JSON-API, nach Kategorien sortiert
 - **Filme (VOD)** — mit Detailseite (Poster, Plot, Jahr, Genre, Rating)
 - **Serien** — Detailseite mit Staffel-Auswahl und Episodenliste
-- **Globale Suche** — durchsucht Sender, Filme und Serien gleichzeitig; Treffer
-  nach Typ gruppiert
+- **Suche** — durchsucht den aktiven Modus (Sender, Filme oder Serien)
 - **EPG / Programmführer**
   - Now/Next-Leiste für den laufenden Kanal (mit Fortschrittsbalken)
   - **TV-Guide** — volles Zeitraster aller Kanäle (Taste `g`)
@@ -104,7 +103,7 @@ Nach dem Start Xtream-Codes-Zugangsdaten eingeben:
 - **Benutzername** und **Passwort** vom IPTV-Anbieter
 
 Die App lädt daraufhin Live-Kanäle (sofort) sowie Filme und Serien (im
-Hintergrund für die globale Suche).
+Hintergrund).
 
 ### Tastenkürzel
 

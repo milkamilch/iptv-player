@@ -298,7 +298,7 @@ export default function App() {
       .then((data) => { if (stillCurrent()) setEpg(data); })
       .catch(() => {});
 
-    // Load VOD + series in background (needed for the global search)
+    // Load VOD + series in background (needed for Filme/Serien)
     setMoviesLoading(true);
     window.iptv.loadXtreamVod(acc.baseUrl, acc.username, acc.password)
       .then((m) => { if (stillCurrent()) setMovies(Array.isArray(m) ? m : []); })
@@ -535,11 +535,9 @@ export default function App() {
         {searching ? (
           <SearchResults
             query={debouncedQuery}
-            live={channels}
-            movies={movies}
-            series={series}
-            moviesLoading={moviesLoading}
-            seriesLoading={seriesLoading}
+            mode={mode}
+            items={collection}
+            loading={mode === 'movies' ? moviesLoading : mode === 'series' ? seriesLoading : false}
             onSelect={handleSearchSelect}
           />
         ) : detailItem?.type === 'movie' ? (
