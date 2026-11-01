@@ -32,7 +32,7 @@ export default function Sidebar({
   favorites, onToggleFavorite,
   globalQuery, onGlobalSearch,
   totalCount, epgReady, epg, listLoading,
-  countryView, countries, countryName, favoriteCount, onSelectCountry, onLeaveCountry,
+  countryView, countries, countryName, favoriteCount, continueCount, onSelectCountry, onLeaveCountry,
 }) {
   const activeCatRef = useRef(null);
   const isLive = mode === 'live';
@@ -107,7 +107,7 @@ export default function Sidebar({
     return (
       <aside className="sidebar">
         <div className="sidebar-top">{searchBox}</div>
-        <CountryList countries={countries} favoriteCount={favoriteCount} onSelect={onSelectCountry} />
+        <CountryList countries={countries} favoriteCount={favoriteCount} continueCount={continueCount} onSelect={onSelectCountry} />
         <div className="sidebar-footer">
           <span>{countries.length} Länder</span>
           <span>{epgReady ? 'EPG ✓' : 'EPG …'}</span>

@@ -10,7 +10,7 @@ import Toolbar from './components/Toolbar.jsx';
 import Settings from './components/Settings.jsx';
 import { movieUrl, episodeUrl } from './xtream.js';
 import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
-import { buildCountryIndex, categoriesOf, FAVORITES } from './country.mjs';
+import { buildCountryIndex, categoriesOf, FAVORITES, CONTINUE } from './country.mjs';
 import './App.css';
 
 export default function App() {
@@ -45,38 +45,32 @@ export default function App() {
   const activeLiveChannel = activePlayable?.type === 'live' ? activePlayable : null;
   const itemType = mode === 'live' ? 'live' : mode === 'movies' ? 'movie' : 'series';
 
-  // Länderebene wird ausschließlich für Live abgeleitet; VOD-Kategorien sind
-  // bei den meisten Providern nach Genre statt nach Land benannt.
-  // Muss vor den weiter unten stehenden Effekten stehen, die countryMode und
-  // activeCountry in ihren Abhängigkeiten lesen.
-  const countryIndex = useMemo(() => buildCountryIndex(channels), [channels]);
-  const countryMode = mode === 'live' && countryIndex.enabled;
+  // Länderebene für alle Modi: ein gemeinsames Land (einmal "Deutschland"
+  // wählen gilt für Sender, Filme und Serien), je Liste ein Index, der nur
+  // neu entsteht, wenn die Liste neu geladen wird. VOD-Kategorien tragen
+  // selten ein Länderpräfix, die Titel fast immer (titlePrefix).
+  const liveIndex = useMemo(() => buildCountryIndex(channels), [channels]);
+  const movieIndex = useMemo(() => buildCountryIndex(movies, { titlePrefix: true }), [movies]);
+  const seriesIndex = useMemo(() => buildCountryIndex(series, { titlePrefix: true }), [series]);
+  const countryIndex = mode === 'live' ? liveIndex : mode === 'movies' ? movieIndex : seriesIndex;
+  const countryMode = countryIndex.enabled;
+  const collection = mode === 'live' ? channels : mode === 'movies' ? movies : series;
   const favoriteCount = useMemo(
-    () => channels.filter((c) => favorites.includes(`live:${c.id}`)).length,
-    [channels, favorites],
+    () => collection.filter((c) => favorites.includes(`${itemType}:${c.id}`)).length,
+    [collection, favorites, itemType],
   );
-  const countryView = countryMode && activeCountry === null;
-
-  // Gültigkeitsprüfung — deckt verschwundene Länder, den leer geräumten
-  // Favoriten-Eintrag und ein auf einen einzigen Eimer geschrumpftes
-  // countryIndex (enabled=false) ab. Läuft erst, sobald der Index etwas
-  // Sinnvolles sagen kann: beim Start ist `channels` noch [], und ein gerade
-  // aus dem Store wiederhergestelltes lastCountry darf nicht sofort wieder
-  // verworfen werden, nur weil der Netzwerk-Load der Kanäle noch nicht
-  // durch ist. `countryIndex.enabled` (nicht `countryMode`) ist hier
-  // absichtlich die Grundlage statt `countryMode`: enabled hängt nur an den
-  // Live-Kanälen, nicht am aktuellen `mode` — ein Wechsel zu Filme/Serien
-  // soll das gemerkte Land nicht löschen, nur die Breadcrumb-Anzeige dort
-  // ausblenden (das macht `countryName` weiter unten).
-  useEffect(() => {
-    if (activeCountry === null || !channels.length) return;
-    const ok = countryIndex.enabled && (
-      activeCountry === FAVORITES
-        ? favoriteCount > 0
-        : countryIndex.countries.some((c) => c.code === activeCountry)
-    );
-    if (!ok) setActiveCountry(null);
-  }, [channels, countryIndex, favoriteCount, activeCountry]);
+  const continueCount = useMemo(
+    () => (mode === 'live' ? 0 : buildContinue().length),
+    [history, mode], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // Gültigkeit wird im Render abgeleitet statt per Effekt auf null gesetzt:
+  // ein Land, das es im aktuellen Modus nicht gibt (oder solange die Liste
+  // noch lädt), zeigt dort die Länderliste, bleibt aber gemerkt und gilt im
+  // nächsten Modus weiter.
+  const countryValid = activeCountry === FAVORITES ? favoriteCount > 0
+    : activeCountry === CONTINUE ? continueCount > 0
+    : activeCountry !== null && countryIndex.countries.some((c) => c.code === activeCountry);
+  const countryView = countryMode && !countryValid;
 
   // Load persisted data on startup
   useEffect(() => {
@@ -146,7 +140,7 @@ export default function App() {
         else if (guideOpen) setGuideOpen(false);
         else if (globalQuery) setGlobalQuery('');
         else if (detailItem) setDetailItem(null);
-        else if (countryMode && activeCountry !== null) leaveCountry();
+        else if (countryMode && !countryView) leaveCountry();
         return;
       }
       // The settings modal is modal — don't let shortcuts act on what's behind it.
@@ -173,7 +167,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen, countryMode, activeCountry]);
+  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen, countryMode, countryView]);
 
   function showToast(msg, type = 'info') {
     // Drop the pending hide timer, else an older toast's timeout cuts this one short.
@@ -191,18 +185,16 @@ export default function App() {
   }
 
   function selectChannel(ch) {
-    const m = countryIndex.meta.get(ch.id);
+    const m = liveIndex.meta.get(ch.id);
     // Nur wechseln, wenn sich das Land wirklich ändert (z.B. Treffer aus der
     // globalen Suche) — sonst setzt jede Kanalauswahl innerhalb desselben
     // Landes (Klick, Pfeiltasten) den aktiven Chip auf "Alle" zurück und
     // schreibt bei jeder Pfeiltaste unnötig nach lastCountry.
-    // Geprüft wird `countryIndex.enabled`, NICHT `countryMode`: countryMode
-    // packt nur `mode === 'live'` obendrauf, und genau dieser Term ist beim
-    // Aufruf aus handleSearchSelect render-veraltet (setMode('live') ist dort
-    // gerade erst abgesetzt, der Re-Render kommt später). Jeder Aufrufer
-    // dieser Funktion wählt ohnehin einen Live-Kanal, der Term trägt also
-    // nichts bei außer dem Fehler.
-    if (countryIndex.enabled && m && activeCountry !== FAVORITES && m.code !== activeCountry) selectCountry(m.code);
+    // Geprüft wird `liveIndex`, NICHT `countryIndex`: der folgt dem Modus und
+    // ist beim Aufruf aus handleSearchSelect render-veraltet. Jeder Aufrufer
+    // wählt einen Live-Kanal. Favoriten bleiben nur stehen, solange der
+    // Eintrag angezeigt wird.
+    if (liveIndex.enabled && m && m.code !== activeCountry && (activeCountry !== FAVORITES || countryView)) selectCountry(m.code);
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
@@ -437,19 +429,17 @@ export default function App() {
   }
 
   // ── Derived: current collection, categories, visible items ───────────────────
-  const collection = mode === 'live' ? channels : mode === 'movies' ? movies : series;
-
   // Providers hand out categories literally called "Alle" (that's also our
   // fallback for uncategorised streams), so the built-in chips have to be
   // deduplicated against the category names — otherwise React sees duplicate keys.
   const groups = useMemo(() => {
     if (countryMode) {
-      if (activeCountry === null || activeCountry === FAVORITES) return [];
-      return [...new Set(['Alle', ...categoriesOf(countryIndex, channels, activeCountry)])];
+      if (countryView || activeCountry === FAVORITES || activeCountry === CONTINUE) return [];
+      return [...new Set(['Alle', ...categoriesOf(countryIndex, collection, activeCountry)])];
     }
     const fixed = mode === 'live' ? ['Alle', 'Favoriten'] : ['Alle', 'Weiter', 'Favoriten'];
     return [...new Set([...fixed, ...collection.map((c) => c.group).filter(Boolean)])];
-  }, [countryMode, activeCountry, countryIndex, channels, mode, collection]);
+  }, [countryMode, countryView, activeCountry, countryIndex, mode, collection]);
 
   // "Weiter" (continue watching) list built from watch history.
   function buildContinue() {
@@ -476,9 +466,10 @@ export default function App() {
   // the search box, clock ticks) — the sidebar memoises its EPG lookups on it.
   const visibleItems = useMemo(() => {
     if (countryMode) {
-      if (activeCountry === null) return [];
-      if (activeCountry === FAVORITES) return channels.filter((c) => favorites.includes(`live:${c.id}`));
-      return channels.filter((c) => {
+      if (countryView) return [];
+      if (activeCountry === CONTINUE) return buildContinue();
+      if (activeCountry === FAVORITES) return collection.filter((c) => favorites.includes(`${itemType}:${c.id}`));
+      return collection.filter((c) => {
         const m = countryIndex.meta.get(c.id);
         if (!m || m.code !== activeCountry) return false;
         return activeGroup === 'Alle' || m.category === activeGroup;
@@ -490,7 +481,7 @@ export default function App() {
       if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
       return true;
     });
-  }, [countryMode, activeCountry, countryIndex, channels, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [countryMode, countryView, activeCountry, countryIndex, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Highlight whatever the list is currently showing for the active playable —
   // for series that's the parent series of the running episode.
@@ -598,7 +589,7 @@ export default function App() {
         activeItemId={activeItemId}
         onItemSelect={(item) => {
           if (mode === 'live') { selectChannel(item); return; }
-          if (activeGroup === 'Weiter') {
+          if (activeGroup === 'Weiter' || (countryMode && activeCountry === CONTINUE)) {
             if (mode === 'movies') playMovie(item);
             else playContinueSeries(item);
             return;
@@ -609,18 +600,20 @@ export default function App() {
         onToggleFavorite={toggleFavorite}
         globalQuery={globalQuery}
         onGlobalSearch={setGlobalQuery}
-        totalCount={countryMode && activeCountry !== null ? visibleItems.length : collection.length}
+        totalCount={countryMode && !countryView ? visibleItems.length : collection.length}
         epgReady={epgReady}
         epg={epg}
         listLoading={mode === 'movies' ? moviesLoading : mode === 'series' ? seriesLoading : false}
         countryView={countryView}
         countries={countryIndex.countries}
         countryName={
-          !countryMode ? null // Länderebene ist Live-only — kein Breadcrumb-Leck nach Filme/Serien
+          !countryMode ? null
             : activeCountry === FAVORITES ? 'Favoriten'
+            : activeCountry === CONTINUE ? 'Weiter'
             : countryIndex.countries.find((c) => c.code === activeCountry)?.name || null
         }
         favoriteCount={favoriteCount}
+        continueCount={continueCount}
         onSelectCountry={selectCountry}
         onLeaveCountry={leaveCountry}
       />

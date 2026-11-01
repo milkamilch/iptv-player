@@ -13,6 +13,8 @@ Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
 - **Live-TV** — Kanäle über die Xtream-Codes-JSON-API, nach Kategorien sortiert
 - **Filme (VOD)** — mit Detailseite (Poster, Plot, Jahr, Genre, Rating)
 - **Serien** — Detailseite mit Staffel-Auswahl und Episodenliste
+- **Länderfilter** — Live, Filme und Serien nach Land (aus der Kategorie, bei Filmen
+  und Serien sonst aus dem Titelpräfix); das gewählte Land gilt in allen Modi
 - **Suche** — durchsucht den aktiven Modus (Sender, Filme oder Serien)
 - **EPG / Programmführer**
   - Now/Next-Leiste für den laufenden Kanal (mit Fortschrittsbalken)

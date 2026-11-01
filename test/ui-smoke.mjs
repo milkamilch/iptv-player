@@ -41,6 +41,8 @@ const STORES = {
   live: {
     activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+    // Schlüssel wie in src/progress.js; macht "Weiter" in Filme erreichbar
+    watchHistory: { 'movie:900': { updatedAt: 1, card: { kind: 'movie', id: '900', name: 'Testfilm', logo: '', containerExt: 'mp4' } } },
   },
   // Deckt das Wiederherstellen eines persistierten Landes beim Start ab:
   // lastCountry sitzt schon im Store, bevor React überhaupt mountet, und
@@ -590,18 +592,79 @@ async function run() {
       check('Fußzeile zählt nur das aktive Land',
         countInCountry > 0 && countInCountry < TOTAL_CHANNELS, `${countInCountry} von ${TOTAL_CHANNELS}`);
 
-      // Regression: die Länderebene ist Live-only. Die Breadcrumb darf nicht
-      // nach Filme/Serien durchsickern, aber das gemerkte Land muss beim
-      // Zurückwechseln zu Live wieder da sein (nur die Anzeige wird
-      // ausgeblendet, activeCountry bleibt erhalten).
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+      // Das Land gilt in allen Modi: Filme/Serien zeigen es, sofern es dort
+      // vorkommt, und merken es auch, wenn nicht.
+      const sidebar = () => json(`({
+        crumb: document.querySelector('.crumb')?.textContent || null,
+        names: [...document.querySelectorAll('.channel-name')].map(e => e.textContent),
+        chips: [...document.querySelectorAll('.cat-chip')].map(b => b.textContent),
+      })`);
+      await pill('Filme');
       await wait(500);
-      check('keine Breadcrumb in Filme', (await ev(`!document.querySelector('.crumb')`)) === true);
+      const movieView = await sidebar();
+      check('Filme übernimmt das Land aus Live',
+        /Deutschland/.test(movieView.crumb || '') && movieView.names.length > 0 &&
+        movieView.names.every((n) => n.startsWith('DE - ')) &&
+        movieView.chips.includes('NETFLIX MOVIES') &&
+        !movieView.chips.includes('Weiter') && !movieView.chips.includes('Favoriten'),
+        JSON.stringify(movieView));
 
-      await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Live').click()`);
+      await pill('Live');
       await wait(500);
       check('Breadcrumb ist nach Rückkehr zu Live wieder da',
         /Deutschland/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
+
+      await pill('Serien');
+      await wait(500);
+      const seriesView = await sidebar();
+      check('Serien zeigt das gemerkte Land',
+        JSON.stringify(seriesView.names) === '["DE - Haustausch (2026) (SE)"]' && seriesView.chips.includes('GERMANY NETFLIX'),
+        JSON.stringify(seriesView));
+
+      await ev(`document.querySelector('.crumb-back').click()`);
+      await wait(500);
+      const seriesCountries = await json(`[...document.querySelectorAll('.country-item .channel-name')].map(e => e.textContent)`);
+      check('Länderliste in Serien',
+        seriesCountries.includes('Deutschland') && seriesCountries.includes('Sonstige') &&
+        !seriesCountries.includes('Favoriten') &&
+        (await ev(`window.iptv.storeGet('lastCountry')`)) == null,
+        JSON.stringify(seriesCountries));
+
+      await pill('Live');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Türkei')).click()`);
+      await wait(500);
+      await pill('Filme');
+      await wait(500);
+      const noMovies = await json(`({
+        items: document.querySelectorAll('.country-item').length,
+        crumb: !!document.querySelector('.crumb'),
+        weiter: [...document.querySelectorAll('.country-item')].find(e => e.textContent.includes('Weiter'))?.querySelector('.country-count')?.textContent || null,
+      })`);
+      check('Land ohne Filme zeigt die Länderliste',
+        noMovies.items > 0 && noMovies.crumb === false && noMovies.weiter === '1', JSON.stringify(noMovies));
+
+      await pill('Live');
+      await wait(500);
+      check('gemerktes Land überlebt einen Modus ohne dieses Land',
+        /Türkei/.test((await ev(`document.querySelector('.crumb')?.textContent || ''`)) || ''));
+
+      await pill('Filme');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Weiter')).click()`);
+      await wait(500);
+      const continueView = await sidebar();
+      check('Weiter-Eintrag zeigt angefangene Filme',
+        /Weiter/.test(continueView.crumb || '') && JSON.stringify(continueView.names) === '["Testfilm"]',
+        JSON.stringify(continueView));
+
+      await pill('Live');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Deutschland')).click()`);
+      await wait(500);
 
       // Regression: ein Live-Treffer aus einem anderen Land muss die Leiste in
       // das Land DES KANALS tragen (Breadcrumb, aktive Zeile, lastCountry).
@@ -640,6 +703,11 @@ async function run() {
     check('ohne Präfixe keine Länderebene',
       (await ev(`document.querySelectorAll('.country-item').length`)) === 0 &&
       (await ev(`document.querySelectorAll('.channel-item').length`)) > 0);
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+    await wait(500);
+    check('ohne Präfixe keine Länderebene in Filme',
+      (await ev(`document.querySelectorAll('.country-item').length`)) === 0 &&
+      (await json(`[...document.querySelectorAll('.cat-chip')].map(b => b.textContent)`)).includes('Weiter'));
   }
 
   const exceptions = events

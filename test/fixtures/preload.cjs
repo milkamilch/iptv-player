@@ -69,8 +69,18 @@ const epg = {};
 }
 
 // rating '0' bedeutet "nicht bewertet" und darf nicht als "* 0" erscheinen
-const movies = [{ id: '900', name: 'Testfilm', group: 'Action', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' }];
-const series = [{ id: '800', name: 'Testserie', group: 'Drama', logo: '', type: 'series' }];
+// Titel tragen das Land als Präfix, die Kategorien nicht (wie beim echten Anbieter).
+// Testfilm/Testserie bleiben ohne Präfix und landen in "Sonstige".
+const vod = (c, n) => PREFIXED ? `${c} - ${n}` : n;
+const movies = [
+  { id: '900', name: 'Testfilm', group: 'Action', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+  { id: '901', name: vod('DE', 'Street Fighter (2026)'), group: 'NETFLIX MOVIES', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+  { id: '902', name: vod('EN', 'Street Fighter (2026)'), group: 'NETFLIX MOVIES', logo: '', containerExt: 'mp4', rating: '0', type: 'movie' },
+];
+const series = [
+  { id: '800', name: 'Testserie', group: 'Drama', logo: '', type: 'series' },
+  { id: '801', name: vod('DE', 'Haustausch (2026) (SE)'), group: 'GERMANY NETFLIX', logo: '', type: 'series' },
+];
 
 contextBridge.exposeInMainWorld('iptv', {
   storeGet: async (k) => store[k],

@@ -76,3 +76,55 @@ test('categoriesOf liefert gekürzte Namen ohne Duplikate, deutsch sortiert', ()
   const idx = buildCountryIndex(chans);
   assert.deepEqual(categoriesOf(idx, chans, 'DE'), ['Nachrichten', 'Österreich-Spezial', 'Sport']);
 });
+
+test('Titelpräfix liefert das Land ohne Kategoriepräfix', () => {
+  const item = { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: 'DE', category: 'GERMANY NETFLIX' });
+});
+
+test('Kategoriepräfix gewinnt gegen den Titelpräfix', () => {
+  const item = { id: '1', name: 'FR - X', group: 'DE | Kino' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: 'DE', category: 'Kino' });
+});
+
+test('EN im Titel ist kein Land', () => {
+  const item = { id: '1', name: 'EN - Street Fighter (2026)', group: 'NETFLIX MOVIES' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.deepEqual(index.meta.get('1'), { code: OTHER, category: 'NETFLIX MOVIES' });
+});
+
+test('ohne Option bleibt der Titel unbeachtet', () => {
+  const item = { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' };
+  const index = buildCountryIndex([item]);
+  assert.deepEqual(index.meta.get('1'), { code: OTHER, category: 'GERMANY NETFLIX' });
+});
+
+test('unbekannte oder fehlende Titelpräfixe landen in Sonstige', () => {
+  const items = [
+    { id: '1', name: 'NF - Foo', group: 'X' },
+    { id: '2', name: '4K - Bar', group: 'X' },
+    { id: '3', group: 'X' },
+  ];
+  const index = buildCountryIndex(items, { titlePrefix: true });
+  for (const it of items) assert.equal(index.meta.get(it.id).code, OTHER);
+});
+
+test('categoriesOf liefert beim Titel-Land die Kategorie, nicht den Titel', () => {
+  const items = [
+    { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' },
+    { id: '2', name: 'DE - Street Fighter (2026)', group: 'NETFLIX MOVIES' },
+  ];
+  const index = buildCountryIndex(items, { titlePrefix: true });
+  assert.deepEqual(categoriesOf(index, items, 'DE'), ['GERMANY NETFLIX', 'NETFLIX MOVIES']);
+});
+
+test('Index über 200.000 Titel dauert unter einer Sekunde', () => {
+  const items = Array.from({ length: 200000 }, (_, i) => ({
+    id: String(i), name: `${i % 2 ? 'DE' : 'FR'} - Titel ${i}`, group: 'NETFLIX MOVIES',
+  }));
+  const t0 = performance.now();
+  buildCountryIndex(items, { titlePrefix: true });
+  assert.ok(performance.now() - t0 < 1000);
+});
