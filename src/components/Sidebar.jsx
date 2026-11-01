@@ -64,8 +64,9 @@ export default function Sidebar({
     if (scrolledToRef.current === activeItemId) return;
     const i = items.findIndex((it) => it.id === activeItemId);
     if (i < 0) return; // noch nicht in der Liste — beim nächsten items-Wechsel erneut
-    scrolledToRef.current = activeItemId;
-    scrollToIndex(i);
+    // Erst merken, wenn wirklich gescrollt wurde: beim Wechsel Kategorienliste →
+    // "Alle" mountet die <ul> im selben Commit, el ist im Effekt noch null.
+    if (scrollToIndex(i)) scrolledToRef.current = activeItemId;
   }, [activeItemId, items, scrollToIndex]);
 
   // "Alle" ist app-eigen und steht immer oben; Kategorien tragen ihren Namen als Code.

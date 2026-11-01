@@ -56,13 +56,15 @@ export function useVirtualRows({ count, estimatedRowHeight, overscan = 3 }) {
   const first = Math.min(rawFirst, Math.max(0, count - 1));
   const last = Math.min(count, first + perScreen + overscan * 2);
 
+  // Gibt zurück, ob gescrollt werden konnte (false, solange el noch fehlt).
   const scrollToIndex = useCallback((i) => {
-    if (!el || i < 0) return;
+    if (!el || i < 0) return false;
     const top = i * rowHeight;
     if (top < el.scrollTop) el.scrollTop = top;
     else if (top + rowHeight > el.scrollTop + el.clientHeight) {
       el.scrollTop = top + rowHeight - el.clientHeight;
     }
+    return true;
   }, [el, rowHeight]);
 
   return {

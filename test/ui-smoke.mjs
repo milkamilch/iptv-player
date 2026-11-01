@@ -848,6 +848,30 @@ async function run() {
       check('Film-Treffer springt nach "Alle" und markiert den Titel',
         afterMovieHit.crumb === 'Alle Länder›Deutschland›Alle' &&
         afterMovieHit.active === 'DE - Street Fighter (2026)', JSON.stringify(afterMovieHit));
+
+      // Regression: ein per Suche gewählter Sender weit hinten in der Liste muss
+      // ins Bild scrollen, auch wenn die Liste im selben Zug erst entsteht
+      // (Kategorienliste → "Alle"). Kanal 416 ist der letzte DE-Kanal der 420.
+      await pill('Live');
+      await wait(500);
+      await setSearch('Kanal 416');
+      await waitUntil(() => ev(`!!document.querySelector('.search-results')`), (v) => v === true);
+      await ev(`[...document.querySelectorAll('.result-card')]
+        .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 416').click()`);
+      const farHit = await waitUntil(
+        () => json(`(() => {
+          const row = document.querySelector('.channel-item.active');
+          const box = document.querySelector('ul.channel-list')?.getBoundingClientRect();
+          const r = row?.getBoundingClientRect();
+          return {
+            active: row?.querySelector('.channel-name')?.textContent || null,
+            // Zeilenmitte im Sichtbereich (die Zeilenhöhen-Schätzung kann um ein paar px abweichen)
+            visible: !!(r && box && (r.top + r.bottom) / 2 > box.top && (r.top + r.bottom) / 2 < box.bottom),
+          };
+        })()`),
+        (v) => v.active === 'Kanal 416' && v.visible, 2000);
+      check('gesuchter Sender weit hinten wird ins Bild gescrollt',
+        farHit.active === 'Kanal 416' && farHit.visible, JSON.stringify(farHit));
     } else {
       console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }
