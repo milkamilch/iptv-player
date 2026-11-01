@@ -75,10 +75,14 @@ export default function App() {
   const countryView = countryMode && !countryValid;
   // Favoriten/Weiter als Pseudo-Land haben keine Kategorieebene: Liste direkt.
   const pseudoCountry = countryMode && (activeCountry === FAVORITES || activeCountry === CONTINUE);
-  const categoryView = !countryView && !pseudoCountry && activeGroup === null;
+  // Ein Favoriten-/Weiter-Sentinel in activeGroup gilt nur ohne Länderebene
+  // (z. B. angeklickt, solange die Filme noch laden). Mit Länderebene ist es
+  // veraltet und zählt wie null: Kategorienliste.
+  const group = countryMode && (activeGroup === FAVORITES || activeGroup === CONTINUE) ? null : activeGroup;
+  const categoryView = !countryView && !pseudoCountry && group === null;
   // Die eine Stelle, die entscheidet, was die Liste zeigt: das Pseudo-Land
   // (mit Länderebene) bzw. der Sentinel in activeGroup (ohne).
-  const level = countryMode ? activeCountry : activeGroup;
+  const level = countryMode ? activeCountry : group;
 
   // Load persisted data on startup
   useEffect(() => {
@@ -465,10 +469,10 @@ export default function App() {
   const allCount = countryMode
     ? countryIndex.countries.find((c) => c.code === activeCountry)?.count ?? 0
     : collection.length;
-  const groupName = pseudoCountry || activeGroup === null ? null
-    : activeGroup === FAVORITES ? 'Favoriten'
-    : activeGroup === CONTINUE ? 'Weiter'
-    : activeGroup;
+  const groupName = pseudoCountry || group === null ? null
+    : group === FAVORITES ? 'Favoriten'
+    : group === CONTINUE ? 'Weiter'
+    : group;
 
   // "Weiter" (continue watching) list built from watch history.
   function buildContinue() {
@@ -498,12 +502,12 @@ export default function App() {
     if (level === CONTINUE) return buildContinue();
     if (level === FAVORITES) return collection.filter((c) => favorites.includes(`${itemType}:${c.id}`));
     return collection.filter((c) => {
-      if (!countryMode) return activeGroup === 'Alle' || c.group === activeGroup;
+      if (!countryMode) return group === 'Alle' || c.group === group;
       const m = countryIndex.meta.get(c.id);
       if (!m || m.code !== activeCountry) return false;
-      return activeGroup === 'Alle' || m.category === activeGroup;
+      return group === 'Alle' || m.category === group;
     });
-  }, [countryMode, countryView, categoryView, level, activeCountry, countryIndex, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [countryMode, countryView, categoryView, level, activeCountry, countryIndex, group, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Highlight whatever the list is currently showing for the active playable —
   // for series that's the parent series of the running episode.

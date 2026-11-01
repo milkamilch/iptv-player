@@ -5,6 +5,9 @@ const store = JSON.parse(process.env.TEST_STORE || '{}');
 const CHANNEL_COUNT = Number(process.env.TEST_CHANNELS || 420);
 const PREFIXED = process.env.TEST_PREFIXED !== '0';
 const LANDS = ['DE', 'US', 'TR', 'FR'];
+// Verzögert Filme/Serien, damit Eingaben in der Ladephase testbar sind.
+const VOD_DELAY = Number(process.env.TEST_VOD_DELAY || 0);
+const delayed = (v) => new Promise((r) => setTimeout(() => r(v), VOD_DELAY));
 
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
@@ -90,8 +93,8 @@ contextBridge.exposeInMainWorld('iptv', {
   secureDecrypt: async (v) => v,
   fetchXtream: async () => ({ user_info: { auth: 1 } }),
   loadXtreamChannels: async () => chans,
-  loadXtreamVod: async () => movies,
-  loadXtreamSeries: async () => series,
+  loadXtreamVod: () => delayed(movies),
+  loadXtreamSeries: () => delayed(series),
   loadXtreamVodInfo: async () => ({ plot: 'p', rating: '0', containerExt: 'mp4' }),
   loadXtreamSeriesInfo: async () => ({ info: {}, seasons: [] }),
   loadXMLTVUrl: async () => epg,

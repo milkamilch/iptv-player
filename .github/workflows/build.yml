@@ -145,6 +145,9 @@ jobs:
       - name: UI smoke test (gemerkter Kanal zieht das Land mit)
         run: SCENARIO=live-restore-channel xvfb-run -a npm run test:ui
 
+      - name: UI smoke test (Weiter in der Ladephase der Filme)
+        run: SCENARIO=vod-delay xvfb-run -a npm run test:ui
+
       - name: Build Linux packages
         run: npm run make
 

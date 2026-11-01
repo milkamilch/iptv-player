@@ -64,6 +64,14 @@ const STORES = {
     lastCountry: 'DE',
     lastChannel: { id: '7', name: 'Kanal 7' },
   },
+  // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
+  // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
+  'vod-delay': {
+    activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'movies', hlsBuffer: 'normal', epgUrl: '' },
+    lastCountry: 'DE',
+    watchHistory: { 'movie:900': { updatedAt: 1, card: { kind: 'movie', id: '900', name: 'Testfilm', logo: '', containerExt: 'mp4' } } },
+  },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -181,6 +189,7 @@ async function run() {
         ...process.env,
         APP_URL: `http://127.0.0.1:${HTTP_PORT}/index.html`,
         TEST_STORE: JSON.stringify(STORES[SCENARIO]),
+        TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
       },
     },
   );
@@ -244,6 +253,27 @@ async function run() {
       check('Start zeigt die Kategorien des gemerkten Landes',
         restored.names[0] === 'Alle' && restored.names.includes('Sport'),
         JSON.stringify(restored.names));
+    }
+  }
+
+  if (SCENARIO === 'vod-delay') {
+    console.log('\nSzenario: "Weiter" in der Ladephase der Filme');
+    if (process.env.TEST_PREFIXED === '0') {
+      console.log('  SKIP  Weiter in der Ladephase — TEST_PREFIXED=0, keine Länderebene');
+    } else {
+      // Ohne geladene Filme ist die Kategorienliste die erste Ebene, "Weiter"
+      // steht darin. Nach dem Laden gibt es die Länderebene: der alte Klick
+      // darf keine leere Liste "…›Weiter" hinterlassen.
+      await ev(`[...document.querySelectorAll('.category-item')]
+        .find(e => e.querySelector('.channel-name')?.textContent === 'Weiter').click()`);
+      const loaded = await waitUntil(
+        () => json(`({
+          crumb: document.querySelector('.crumb')?.textContent || null,
+          cats: [...document.querySelectorAll('.category-item .channel-name')].map(e => e.textContent),
+        })`),
+        (v) => v.cats.includes('NETFLIX MOVIES'), 10000);
+      check('Weiter aus der Ladephase endet in der Kategorienliste des Landes',
+        loaded.crumb === 'Alle Länder›Deutschland' && !loaded.cats.includes('Weiter'), JSON.stringify(loaded));
     }
   }
 
