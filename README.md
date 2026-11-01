@@ -1,144 +1,144 @@
 # IPTV Player
 
-Ein schlanker Desktop-IPTV-Player für **Live-TV, Filme und Serien** über
-**Xtream Codes** (oder M3U-Playlists). Dark, minimalistisch, futuristisch —
-Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
+A lightweight desktop IPTV player for **live TV, movies and series** via
+**Xtream Codes** (or M3U playlists). Dark, minimalist, futuristic —
+a full-screen video feed with floating frosted-glass panels.
 
-> Built with Electron + React. Läuft unter **Windows, Linux und macOS**.
-
----
-
-## ✨ Funktionen
-
-- **Live-TV** — Kanäle über die Xtream-Codes-JSON-API, nach Kategorien sortiert
-- **Filme (VOD)** — mit Detailseite (Poster, Plot, Jahr, Genre, Rating)
-- **Serien** — Detailseite mit Staffel-Auswahl und Episodenliste
-- **Globale Suche** — durchsucht Sender, Filme und Serien gleichzeitig; Treffer
-  nach Typ gruppiert
-- **EPG / Programmführer**
-  - Now/Next-Leiste für den laufenden Kanal (mit Fortschrittsbalken)
-  - **TV-Guide** — volles Zeitraster aller Kanäle (Taste `g`)
-  - gzip-EPG & Zeitzonen werden korrekt verarbeitet
-- **Favoriten** für Kanäle, Filme **und** Serien
-- **Weiterschauen** — „Weiter"-Reihe mit angefangenen Filmen/Serien; Serien merken
-  sich die zuletzt gesehene Episode (✓ für gesehen, Fortschrittsbalken)
-- **Tastatur-Steuerung** — `↑`/`↓` Kanalwechsel, Leertaste Play/Pause
-- **Einstellungen** — Start-Modus, Puffergröße, eigene EPG-URL, Verlauf löschen
-- **Auto-Updates** — neue Versionen werden automatisch aus den GitHub-Releases gezogen
-- **Mehrere Zugänge** — bis zu 5 gespeicherte Xtream-Accounts (Passwörter per
-  OS-Keyring verschlüsselt), Auto-Login
-- **M3U- & XMLTV-Import** — Playlist/EPG optional aus Datei oder URL laden
-- HLS-Streaming (`.m3u8`, mit Reconnect) sowie direkte VOD-Container (`mp4`/`mkv`)
+> Built with Electron + React. Runs on **Windows, Linux and macOS**.
 
 ---
 
-## 🧱 Tech-Stack
+## ✨ Features
 
-| Bereich | Technologie |
+- **Live TV** — channels via the Xtream Codes JSON API, sorted by category
+- **Movies (VOD)** — with a detail page (poster, plot, year, genre, rating)
+- **Series** — detail page with season picker and episode list
+- **Global search** — searches channels, movies and series at once; results
+  grouped by type
+- **EPG / programme guide**
+  - Now/Next bar for the current channel (with progress bar)
+  - **TV guide** — full time grid of all channels (key `g`)
+  - gzipped EPGs and time zones are handled correctly
+- **Favorites** for channels, movies **and** series
+- **Continue watching** — a "Continue" row with started movies/series; series
+  remember the last watched episode (✓ for watched, progress bar)
+- **Keyboard control** — `↑`/`↓` to switch channels, Space to play/pause
+- **Settings** — start mode, buffer size, custom EPG URL, clear history
+- **Auto-updates** — new versions are pulled automatically from GitHub Releases
+- **Multiple accounts** — up to 5 saved Xtream accounts (passwords encrypted
+  via the OS keyring), auto-login
+- **M3U & XMLTV import** — optionally load playlist/EPG from a file or URL
+- HLS streaming (`.m3u8`, with reconnect) plus direct VOD containers (`mp4`/`mkv`)
+
+---
+
+## 🧱 Tech stack
+
+| Area | Technology |
 |---|---|
-| Runtime / Shell | [Electron](https://www.electronjs.org/) 42 |
-| Build / Packaging | [Electron Forge](https://www.electronforge.io/) 7 + [Vite](https://vitejs.dev/) 5 |
+| Runtime / shell | [Electron](https://www.electronjs.org/) 42 |
+| Build / packaging | [Electron Forge](https://www.electronforge.io/) 7 + [Vite](https://vitejs.dev/) 5 |
 | UI | [React](https://react.dev/) 19 |
 | Streaming | [hls.js](https://github.com/video-dev/hls.js/) |
-| Persistenz | [electron-store](https://github.com/sindresorhus/electron-store) |
+| Persistence | [electron-store](https://github.com/sindresorhus/electron-store) |
 | Fonts | Space Grotesk + JetBrains Mono (offline via `@fontsource`) |
-| Backend-Quelle | Xtream Codes API / M3U / XMLTV |
+| Backend source | Xtream Codes API / M3U / XMLTV |
 
 ---
 
 ## 📦 Installation
 
-### Windows (fertiger Installer)
+### Windows (prebuilt installer)
 
-1. Neuesten **`IPTV-Player-Setup.exe`** von der
-   [Releases-Seite](https://github.com/milkamilch/iptv-player/releases/latest)
-   herunterladen.
-2. Doppelklick → installiert die App (Startmenü-Eintrag, kein Terminal nötig).
+1. Download the latest **`IPTV-Player-Setup.exe`** from the
+   [Releases page](https://github.com/milkamilch/iptv-player/releases/latest).
+2. Double-click → installs the app (Start menu entry, no terminal needed).
 
-> ℹ️ Beim ersten Start zeigt Windows evtl. **SmartScreen** („Unbekannter
-> Herausgeber"), da der Installer nicht code-signiert ist:
-> **Weitere Informationen → Trotzdem ausführen**.
+> ℹ️ On first launch Windows may show **SmartScreen** ("Unknown
+> publisher") because the installer is not code-signed:
+> **More info → Run anyway**.
 
 ### Linux / macOS
 
-Aus dem Quellcode bauen (siehe unten) oder unter Linux das `.deb`/`.rpm` bzw.
-`.zip` aus `npm run make` verwenden.
+Build from source (see below), or on Linux use the `.deb`/`.rpm` or
+`.zip` from `npm run make`.
 
 ---
 
-## 🚀 Aus dem Quellcode
+## 🚀 From source
 
-Voraussetzung: **Node.js 20+**.
+Requires **Node.js 22.12+** (Electron's postinstall fails on Node 20).
 
 ```bash
 git clone https://github.com/milkamilch/iptv-player.git
 cd iptv-player
 npm install
 
-# App im Entwicklungsmodus starten
+# Start the app in development mode
 npm start
 ```
 
-### Installer / Pakete bauen
+### Building installers / packages
 
 ```bash
 npm run make
 ```
 
-Erzeugt in `out/make/` je nach Plattform:
+Produces in `out/make/`, depending on the platform:
 
 - **Windows** → `IPTV-Player-Setup.exe` (Squirrel)
 - **Linux** → `.deb`, `.rpm`
-- **alle** → `.zip`
+- **all** → `.zip`
 
-> Windows-Installer lassen sich nur **auf Windows** (oder via CI) bauen — siehe
-> unten.
+> Windows installers can only be built **on Windows** (or via CI) — see
+> below.
 
 ---
 
-## 🔧 Nutzung
+## 🔧 Usage
 
-Nach dem Start Xtream-Codes-Zugangsdaten eingeben:
+After launch, enter your Xtream Codes credentials:
 
-- **Server-URL** — z. B. `http://dein-anbieter.example:8080`
-- **Benutzername** und **Passwort** vom IPTV-Anbieter
+- **Server URL** — e.g. `http://your-provider.example:8080`
+- **Username** and **password** from your IPTV provider
 
-Die App lädt daraufhin Live-Kanäle (sofort) sowie Filme und Serien (im
-Hintergrund für die globale Suche).
+The app then loads live channels (immediately) as well as movies and series (in
+the background, for global search).
 
-### Tastenkürzel
+### Keyboard shortcuts
 
-| Taste | Aktion |
+| Key | Action |
 |---|---|
-| `g` | TV-Guide öffnen/schließen (im Live-Modus) |
-| `↑` / `↓` | vorheriger / nächster Kanal (Live) |
-| `Leertaste` | Play / Pause |
-| `Esc` | eine Ebene zurück (Guide → Suche → Detail) |
+| `g` | Open/close TV guide (in live mode) |
+| `↑` / `↓` | Previous / next channel (live) |
+| `Space` | Play / pause |
+| `Esc` | Go back one level (guide → search → detail) |
 
 ---
 
-## 🏗️ Release-Build (CI)
+## 🏗️ Release build (CI)
 
-Ein GitHub-Actions-Workflow (`.github/workflows/build-windows.yml`) baut den
-Windows-Installer auf einem echten Windows-Runner:
+A GitHub Actions workflow (`.github/workflows/build.yml`) builds the
+Windows installer on a real Windows runner and the Linux packages
+(`.deb`, `.rpm`, `.zip`) on Ubuntu:
 
-- **Push auf `master`** → Installer als herunterladbares **Artefakt**
-- **Tag `v*`** (z. B. `git tag v1.1.0 && git push origin v1.1.0`) → veröffentlicht
-  automatisch einen **GitHub Release** mit angehängtem `IPTV-Player-Setup.exe`
+- **Push to `master`** → packages as downloadable **artifacts**
+- **Tag `v*`** (e.g. `git tag v1.1.0 && git push origin v1.1.0`) → automatically
+  publishes a **GitHub Release** with `IPTV-Player-Setup.exe` and the Linux packages attached
 
 ---
 
-## 📁 Projektstruktur
+## 📁 Project structure
 
 ```
 src/
-├─ main.js              # Electron-Hauptprozess: Fenster, IPC, Xtream/M3U/XMLTV-Fetch
-├─ preload.js           # sichere Bridge (window.iptv)
-├─ renderer.jsx         # React-Einstieg + Fonts
-├─ App.jsx              # State, Navigation, Layout
-├─ xtream.js            # Stream-URL-Helfer (movie/episode)
-├─ epg.js               # EPG-Matching & XMLTV-Datum
-├─ App.css              # „Glass"-Designsystem
+├─ main.js              # Electron main process: window, IPC, Xtream/M3U/XMLTV fetch
+├─ preload.js           # secure bridge (window.iptv)
+├─ renderer.jsx         # React entry + fonts
+├─ App.jsx              # state, navigation, layout
+├─ xtream.js            # stream URL helpers (movie/episode)
+├─ epg.js               # EPG matching & XMLTV dates
+├─ App.css              # "glass" design system
 └─ components/
    ├─ LoginModal.jsx    ├─ Toolbar.jsx     ├─ Sidebar.jsx
    ├─ VideoPlayer.jsx   ├─ EPGBar.jsx      ├─ EPGGrid.jsx
@@ -147,6 +147,6 @@ src/
 
 ---
 
-## 📄 Lizenz
+## 📄 License
 
 MIT © Lars Wenner
