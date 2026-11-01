@@ -139,10 +139,11 @@ export default function App() {
   }, [globalQuery]);
 
   // Keep watch history fresh across navigation (for the "Weiter" list).
+  // activeCountry: mit Länderebene ist "Weiter" ein Pseudo-Land.
   useEffect(() => {
     if (!account) return;
     getHistory().then(setHistory);
-  }, [account, mode, activeGroup, activePlayable, detailItem]);
+  }, [account, mode, activeGroup, activeCountry, activePlayable, detailItem]);
 
   // Keyboard: g=Guide, Esc=back, Space=play/pause, ↑/↓=channel (live).
   useEffect(() => {

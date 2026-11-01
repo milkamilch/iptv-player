@@ -872,6 +872,25 @@ async function run() {
         (v) => v.active === 'Kanal 416' && v.visible, 2000);
       check('gesuchter Sender weit hinten wird ins Bild gescrollt',
         farHit.active === 'Kanal 416' && farHit.visible, JSON.stringify(farHit));
+
+      // Regression: "Weiter" wird beim Länderwechsel aufgefrischt. Der Verlauf
+      // ändert sich hier von außen (wie beim Zu-Ende-Schauen), die Liste muss
+      // beim Öffnen von "Weiter" den neuen Stand zeigen statt des alten.
+      await pill('Filme');
+      await wait(500);
+      await ev(`[...document.querySelectorAll('.crumb-back')].find(b => b.textContent === 'Alle Länder').click()`);
+      await wait(300);
+      await ev(`window.iptv.storeSet('watchHistory', {})`);
+      await ev(`[...document.querySelectorAll('.country-item')]
+        .find(e => e.textContent.includes('Weiter')).click()`);
+      const refreshed = await waitUntil(
+        () => json(`({
+          weiterItem: [...document.querySelectorAll('.country-item')].some(e => e.textContent.includes('Weiter')),
+          names: [...document.querySelectorAll('.channel-item:not(.category-item):not(.country-item) .channel-name')].map(e => e.textContent),
+        })`),
+        (v) => v.names.length === 0, 2000);
+      check('Weiter zeigt nach Verlaufsänderung den neuen Stand',
+        refreshed.names.length === 0 && refreshed.weiterItem === false, JSON.stringify(refreshed));
     } else {
       console.log('  SKIP  Fußzeile zählt nur das aktive Land — TEST_PREFIXED=0, kein Länderlevel erwartet');
     }
