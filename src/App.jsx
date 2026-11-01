@@ -10,7 +10,7 @@ import Toolbar from './components/Toolbar.jsx';
 import Settings from './components/Settings.jsx';
 import { movieUrl, episodeUrl } from './xtream.js';
 import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
-import { buildCountryIndex, categoriesOf, FAVORITES, CONTINUE } from './country.mjs';
+import { buildCountryIndex, categoryCounts, FAVORITES, CONTINUE } from './country.mjs';
 import './App.css';
 
 export default function App() {
@@ -28,7 +28,9 @@ export default function App() {
   const [activePlayable, setActivePlayable] = useState(null); // { id, name, url, type }
   const [detailItem, setDetailItem]       = useState(null);   // { type:'movie'|'series', item }
   const [globalQuery, setGlobalQuery]     = useState('');
-  const [activeGroup, setActiveGroup]     = useState('Alle');
+  // null = Kategorienliste, sonst 'Alle' | Kategoriename | FAVORITES | CONTINUE
+  // (die beiden Sentinels nur ohne Länderebene, mit ihr sind sie ein Pseudo-Land).
+  const [activeGroup, setActiveGroup]     = useState(null);
   const [activeCountry, setActiveCountry] = useState(null); // null = Länderliste
   const [epgBarOpen, setEpgBarOpen]       = useState(true);
   const [guideOpen, setGuideOpen]         = useState(false);
@@ -71,6 +73,12 @@ export default function App() {
     : activeCountry === CONTINUE ? continueCount > 0
     : activeCountry !== null && countryIndex.countries.some((c) => c.code === activeCountry);
   const countryView = countryMode && !countryValid;
+  // Favoriten/Weiter als Pseudo-Land haben keine Kategorieebene: Liste direkt.
+  const pseudoCountry = countryMode && (activeCountry === FAVORITES || activeCountry === CONTINUE);
+  const categoryView = !countryView && !pseudoCountry && activeGroup === null;
+  // Die eine Stelle, die entscheidet, was die Liste zeigt: das Pseudo-Land
+  // (mit Länderebene) bzw. der Sentinel in activeGroup (ohne).
+  const level = countryMode ? activeCountry : activeGroup;
 
   // Load persisted data on startup
   useEffect(() => {
@@ -140,7 +148,7 @@ export default function App() {
         else if (guideOpen) setGuideOpen(false);
         else if (globalQuery) setGlobalQuery('');
         else if (detailItem) setDetailItem(null);
-        else if (countryMode && !countryView) leaveCountry();
+        else goBack();
         return;
       }
       // The settings modal is modal — don't let shortcuts act on what's behind it.
@@ -167,7 +175,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen, countryMode, countryView]);
+  }, [account, mode, guideOpen, globalQuery, detailItem, settingsOpen, countryMode, countryView, activeGroup, activeCountry]);
 
   function showToast(msg, type = 'info') {
     // Drop the pending hide timer, else an older toast's timeout cuts this one short.
@@ -179,22 +187,25 @@ export default function App() {
   // ── Navigation ──────────────────────────────────────────────────────────────
   function switchMode(m) {
     setMode(m);
-    setActiveGroup('Alle');
+    setActiveGroup(null);
     setDetailItem(null);
     setGlobalQuery('');
   }
 
   function selectChannel(ch) {
     const m = liveIndex.meta.get(ch.id);
-    // Nur wechseln, wenn sich das Land wirklich ändert (z.B. Treffer aus der
-    // globalen Suche) — sonst setzt jede Kanalauswahl innerhalb desselben
-    // Landes (Klick, Pfeiltasten) den aktiven Chip auf "Alle" zurück und
-    // schreibt bei jeder Pfeiltaste unnötig nach lastCountry.
-    // Geprüft wird `liveIndex`, NICHT `countryIndex`: der folgt dem Modus und
-    // ist beim Aufruf aus handleSearchSelect render-veraltet. Jeder Aufrufer
-    // wählt einen Live-Kanal. Favoriten bleiben nur stehen, solange der
-    // Eintrag angezeigt wird.
-    if (liveIndex.enabled && m && m.code !== activeCountry && (activeCountry !== FAVORITES || countryView)) selectCountry(m.code);
+    // Eine Regel: steht der Kanal nicht in der offenen Liste (Suche, Guide,
+    // Restore), wechselt die Leiste in sein Land und auf "Alle", damit die
+    // Zeile sichtbar und markiert ist. Klick und Pfeiltaste liegen in der
+    // offenen Liste und lassen Land und Kategorie stehen.
+    // navRef statt visibleItems: der Key-Handler hält eine ältere Closure.
+    // `liveIndex`, NICHT `countryIndex`: der folgt dem Modus und ist beim
+    // Aufruf aus handleSearchSelect render-veraltet. Jeder Aufrufer wählt einen
+    // Live-Kanal.
+    if (!navRef.current.visibleItems?.some((c) => c.id === ch.id)) {
+      if (liveIndex.enabled && m) selectCountry(m.code);
+      setActiveGroup('Alle');
+    }
     setActivePlayable({ ...ch, type: 'live' });
     setDetailItem(null);
     setGuideOpen(false);
@@ -204,14 +215,22 @@ export default function App() {
 
   function selectCountry(code) {
     setActiveCountry(code);
-    setActiveGroup('Alle');
+    setActiveGroup(null);
     window.iptv.storeSet('lastCountry', code);
   }
 
   function leaveCountry() {
     setActiveCountry(null);
-    setActiveGroup('Alle');
+    setActiveGroup(null);
     window.iptv.storeDelete('lastCountry');
+  }
+
+  // Esc und Breadcrumb: genau eine Ebene zurück. Ohne Länderebene ist die
+  // Kategorienliste die erste Ebene, dort gibt es nichts mehr zu verlassen.
+  function goBack() {
+    if (countryView) return;
+    if (categoryView || pseudoCountry) { if (countryMode) leaveCountry(); return; }
+    setActiveGroup(null);
   }
 
   function playMovie(movie) {
@@ -249,9 +268,11 @@ export default function App() {
   }
 
   function handleSearchSelect(type, item) {
-    if (type === 'live')        { switchMode('live');   selectChannel(item); }
-    else if (type === 'movie')  { setMode('movies'); setActiveGroup('Alle'); openDetail('movie', item); }
-    else if (type === 'series') { setMode('series'); setActiveGroup('Alle'); openDetail('series', item); }
+    // Kein switchMode: der Modus stimmt (Suche gilt nur für ihn) und es würde
+    // die Kategorie, die selectChannel gerade setzt, wieder zurücksetzen.
+    if (type === 'live')        selectChannel(item);
+    else if (type === 'movie')  { setMode('movies'); setActiveGroup(null); openDetail('movie', item); }
+    else if (type === 'series') { setMode('series'); setActiveGroup(null); openDetail('series', item); }
     setGlobalQuery('');
   }
 
@@ -274,7 +295,7 @@ export default function App() {
       const chs = await window.iptv.loadXtreamChannels(acc.baseUrl, acc.username, acc.password);
       if (loginNonceRef.current !== loginId) return; // superseded by a newer login
       setChannels(chs);
-      setActiveGroup('Alle');
+      setActiveGroup(null);
       showToast(`${chs.length} Kanäle geladen`, 'success');
     } catch (e) {
       if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
@@ -353,7 +374,7 @@ export default function App() {
       const result = await window.iptv.openM3UFile();
       if (result) {
         setChannels(result.channels);
-        setActiveGroup('Alle');
+        setActiveGroup(null);
         showToast(`${result.channels.length} Kanäle geladen`, 'success');
       }
     } catch (e) {
@@ -368,7 +389,7 @@ export default function App() {
     try {
       const chs = await window.iptv.loadM3UUrl(url);
       setChannels(chs);
-      setActiveGroup('Alle');
+      setActiveGroup(null);
       showToast(`${chs.length} Kanäle geladen`, 'success');
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
@@ -429,17 +450,24 @@ export default function App() {
   }
 
   // ── Derived: current collection, categories, visible items ───────────────────
-  // Providers hand out categories literally called "Alle" (that's also our
-  // fallback for uncategorised streams), so the built-in chips have to be
-  // deduplicated against the category names — otherwise React sees duplicate keys.
-  const groups = useMemo(() => {
-    if (countryMode) {
-      if (countryView || activeCountry === FAVORITES || activeCountry === CONTINUE) return [];
-      return [...new Set(['Alle', ...categoriesOf(countryIndex, collection, activeCountry)])];
-    }
-    const fixed = mode === 'live' ? ['Alle', 'Favoriten'] : ['Alle', 'Weiter', 'Favoriten'];
-    return [...new Set([...fixed, ...collection.map((c) => c.group).filter(Boolean)])];
-  }, [countryMode, countryView, activeCountry, countryIndex, mode, collection]);
+  // Kategorienliste: ein O(n)-Lauf je Land (oder je Liste ohne Länderebene).
+  // "Alle" ist app-eigen — Provider-Kategorien, die wörtlich so heißen (auch
+  // der Rückfall für unkategorisierte Streams), fliegen raus, sonst gäbe es
+  // doppelte Keys. Favoriten/Weiter als Pseudo-Land haben keine Kategorien.
+  const categories = useMemo(() => {
+    if (countryView || pseudoCountry) return [];
+    const categoryOf = countryMode
+      ? (c) => { const m = countryIndex.meta.get(c.id); return m && m.code === activeCountry ? m.category : null; }
+      : (c) => c.group;
+    return categoryCounts(collection, categoryOf).filter((c) => c.name !== 'Alle');
+  }, [countryView, pseudoCountry, countryMode, countryIndex, activeCountry, collection]);
+  const allCount = countryMode
+    ? countryIndex.countries.find((c) => c.code === activeCountry)?.count ?? 0
+    : collection.length;
+  const groupName = pseudoCountry || activeGroup === null ? null
+    : activeGroup === FAVORITES ? 'Favoriten'
+    : activeGroup === CONTINUE ? 'Weiter'
+    : activeGroup;
 
   // "Weiter" (continue watching) list built from watch history.
   function buildContinue() {
@@ -465,23 +493,16 @@ export default function App() {
   // Memoised so the list keeps its identity across unrelated renders (typing in
   // the search box, clock ticks) — the sidebar memoises its EPG lookups on it.
   const visibleItems = useMemo(() => {
-    if (countryMode) {
-      if (countryView) return [];
-      if (activeCountry === CONTINUE) return buildContinue();
-      if (activeCountry === FAVORITES) return collection.filter((c) => favorites.includes(`${itemType}:${c.id}`));
-      return collection.filter((c) => {
-        const m = countryIndex.meta.get(c.id);
-        if (!m || m.code !== activeCountry) return false;
-        return activeGroup === 'Alle' || m.category === activeGroup;
-      });
-    }
-    if (activeGroup === 'Weiter' && mode !== 'live') return buildContinue();
+    if (countryView || categoryView) return [];
+    if (level === CONTINUE) return buildContinue();
+    if (level === FAVORITES) return collection.filter((c) => favorites.includes(`${itemType}:${c.id}`));
     return collection.filter((c) => {
-      if (activeGroup === 'Favoriten') return favorites.includes(`${itemType}:${c.id}`);
-      if (activeGroup !== 'Alle' && c.group !== activeGroup) return false;
-      return true;
+      if (!countryMode) return activeGroup === 'Alle' || c.group === activeGroup;
+      const m = countryIndex.meta.get(c.id);
+      if (!m || m.code !== activeCountry) return false;
+      return activeGroup === 'Alle' || m.category === activeGroup;
     });
-  }, [countryMode, countryView, activeCountry, countryIndex, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [countryMode, countryView, categoryView, level, activeCountry, countryIndex, activeGroup, mode, collection, favorites, itemType, history]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Highlight whatever the list is currently showing for the active playable —
   // for series that's the parent series of the running episode.
@@ -583,13 +604,10 @@ export default function App() {
       <Sidebar
         mode={mode}
         items={visibleItems}
-        groups={groups}
-        activeGroup={activeGroup}
-        onGroupChange={setActiveGroup}
         activeItemId={activeItemId}
         onItemSelect={(item) => {
           if (mode === 'live') { selectChannel(item); return; }
-          if (activeGroup === 'Weiter' || (countryMode && activeCountry === CONTINUE)) {
+          if (level === CONTINUE) {
             if (mode === 'movies') playMovie(item);
             else playContinueSeries(item);
             return;
@@ -600,7 +618,6 @@ export default function App() {
         onToggleFavorite={toggleFavorite}
         globalQuery={globalQuery}
         onGlobalSearch={setGlobalQuery}
-        totalCount={countryMode && !countryView ? visibleItems.length : collection.length}
         epgReady={epgReady}
         epg={epg}
         listLoading={mode === 'movies' ? moviesLoading : mode === 'series' ? seriesLoading : false}
@@ -612,22 +629,30 @@ export default function App() {
             : activeCountry === CONTINUE ? 'Weiter'
             : countryIndex.countries.find((c) => c.code === activeCountry)?.name || null
         }
-        favoriteCount={favoriteCount}
-        continueCount={continueCount}
+        // Mit Länderebene stehen Favoriten/Weiter nur in der Länderliste.
+        favoriteCount={categoryView && countryMode ? 0 : favoriteCount}
+        continueCount={categoryView && countryMode ? 0 : continueCount}
         onSelectCountry={selectCountry}
         onLeaveCountry={leaveCountry}
+        categoryView={categoryView}
+        categories={categories}
+        allCount={allCount}
+        groupName={groupName}
+        onSelectGroup={setActiveGroup}
+        onLeaveGroup={() => setActiveGroup(null)}
       />
 
       {guideOpen && mode === 'live' && (
         <EPGGrid
-          // In der Länderansicht ist `visibleItems` leer (kein Land gewählt) —
-          // der Guide zeigt dort alle Live-Kanäle statt einer leeren Tabelle.
+          // In Länder- und Kategorienliste ist `visibleItems` leer (noch keine
+          // Liste gewählt) — der Guide zeigt dort alle Live-Kanäle statt einer
+          // leeren Tabelle.
           // Das ist genau der Zustand nach einer Neuinstallation, und die
           // Zeilen sind gefenstert, kosten also auch bei voller Playlist
           // nichts. Ein Klick im Guide trägt über selectChannel ins Land des
           // gewählten Senders. Guide-Knopf und 'g' bleiben deshalb in beiden
           // Ansichten aktiv und stimmen miteinander überein.
-          channels={countryView ? channels : visibleItems}
+          channels={countryView || categoryView ? channels : visibleItems}
           epg={epg}
           activeChannel={activeLiveChannel}
           onSelect={selectChannel}

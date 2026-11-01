@@ -17,6 +17,8 @@ Vollbild-Video-Feed mit schwebenden Milchglas-Panels.
 - **Serien** — Detailseite mit Staffel-Auswahl und Episodenliste
 - **Länderfilter** — Live, Filme und Serien nach Land (aus der Kategorie, bei Filmen
   und Serien sonst aus dem Titelpräfix); das gewählte Land gilt in allen Modi
+- **Navigation** — Land → Kategorie → Sender/Titel; „Alle" zeigt alles eines Landes,
+  Breadcrumb und `Esc` führen eine Ebene zurück
 - **Suche** — durchsucht den aktiven Modus (Sender, Filme oder Serien)
 - **EPG / Programmführer**
   - Now/Next-Leiste für den laufenden Kanal (mit Fortschrittsbalken)
@@ -116,7 +118,7 @@ Hintergrund).
 | `g` | TV-Guide öffnen/schließen (im Live-Modus) |
 | `↑` / `↓` | vorheriger / nächster Kanal (Live) |
 | `Leertaste` | Play / Pause |
-| `Esc` | eine Ebene zurück (Guide → Suche → Detail) |
+| `Esc` | eine Ebene zurück (Guide → Suche → Detail → Liste → Kategorien → Länder) |
 
 ---
 

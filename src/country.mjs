@@ -85,12 +85,14 @@ export function buildCountryIndex(channels, { titlePrefix = false } = {}) {
   return { enabled: countries.length > 1, countries, meta };
 }
 
-/** Gekürzte Kategorienamen eines Landes, ohne Duplikate. */
-export function categoriesOf(index, channels, code) {
-  const seen = new Set();
-  for (const ch of channels || []) {
-    const m = index.meta.get(ch.id);
-    if (m && m.code === code && m.category) seen.add(m.category);
+/** Zählt Einträge je Kategorie, deutsch sortiert; categoryOf liefert null/'' für "nicht dabei". */
+export function categoryCounts(items, categoryOf) {
+  const counts = new Map();
+  for (const it of items || []) {
+    const name = categoryOf(it);
+    if (name) counts.set(name, (counts.get(name) || 0) + 1);
   }
-  return [...seen].sort((a, b) => a.localeCompare(b, 'de'));
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
