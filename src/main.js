@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electro
 import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { updateElectronApp } from 'update-electron-app';
+import { fetchText as fetchTextWith } from './fetch-text.mjs';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import path from 'node:path';
@@ -119,22 +120,10 @@ const createWindow = () => {
 };
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
-// Collect the body as bytes and decode once at the end. Decoding chunk by chunk
-// mangles multi-byte UTF-8 characters that straddle a chunk boundary — which is
-// how "für" turns into "f??r" in channel names, depending on packet timing.
-async function fetchText(url) {
+// Logik in fetch-text.mjs (Body als Bytes, strict für Xtream).
+async function fetchText(url, { strict = false } = {}) {
   const { net } = await import('electron');
-  return new Promise((resolve, reject) => {
-    const req = net.request(url);
-    const chunks = [];
-    req.on('response', (res) => {
-      res.on('data', (chunk) => { chunks.push(Buffer.from(chunk)); });
-      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-      res.on('error', reject);
-    });
-    req.on('error', reject);
-    req.end();
-  });
+  return fetchTextWith(url, { request: (u) => net.request(u), strict });
 }
 
 // ── IPC Handlers ──────────────────────────────────────────────────────────────
@@ -185,7 +174,7 @@ ipcMain.handle('load-xmltv-url', async (_event, url) => {
 
 // ── Xtream Codes API fetch (generic JSON) ────────────────────────────────────
 async function fetchJson(url) {
-  const text = await fetchText(url);
+  const text = await fetchText(url, { strict: true });
   try { return JSON.parse(text); }
   catch { throw new Error('Ungültige JSON-Antwort'); }
 }
