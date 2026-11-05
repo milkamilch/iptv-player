@@ -86,7 +86,8 @@ jobs:
             out/make/squirrel.windows/**/RELEASES
 
   linux:
-    runs-on: ubuntu-latest
+    # rpm >= 4.20 (ubuntu-26.04) bricht electron-installer-redhat ab (#3).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
