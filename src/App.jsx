@@ -11,10 +11,11 @@ import Settings from './components/Settings.jsx';
 import { movieUrl, episodeUrl } from './xtream.js';
 import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
 import { buildCountryIndex, categoryCounts, FAVORITES, CONTINUE } from './country.mjs';
+import { urlsOf, failoverOrder, firstWorking, sameAccount } from './servers.mjs';
 import './App.css';
 
 export default function App() {
-  const [account, setAccount]             = useState(null);   // { baseUrl, username, password }
+  const [account, setAccount]             = useState(null);   // { baseUrl (aktiv), baseUrls, username, password }
   const [savedAccounts, setSavedAccounts] = useState([]);
   const [channels, setChannels]           = useState([]);
   const [movies, setMovies]               = useState([]);
@@ -291,9 +292,34 @@ export default function App() {
     return `${acc.baseUrl}/xmltv.php?username=${encodeURIComponent(acc.username)}&password=${encodeURIComponent(acc.password)}`;
   }
 
+  // Merkt die gewechselte URL, damit der nächste Start dort beginnt.
+  // Passwörter bleiben, wie sie im Store liegen (schon verschlüsselt).
+  async function rememberActive(session) {
+    const { baseUrl } = session;
+    const switched = (a) => (sameAccount(a, session) ? { ...a, baseUrl } : a);
+    setSavedAccounts((list) => list.map(switched));
+    const saved = await window.iptv.storeGet('savedAccounts');
+    if (Array.isArray(saved)) window.iptv.storeSet('savedAccounts', saved.map(switched));
+    const active = await window.iptv.storeGet('activeAccount');
+    if (active && sameAccount(active, session)) window.iptv.storeSet('activeAccount', { ...active, baseUrl });
+  }
+
+  // Ruft call(url) mit der aktiven URL, bei Fehler mit den anderen. Gewinnt eine
+  // andere, wird sie die aktive URL der Sitzung (nur wenn die noch dieselbe ist).
+  async function viaServers(acc, call) {
+    const { baseUrl, value } = await firstWorking(failoverOrder(urlsOf(acc), acc.baseUrl), call);
+    if (baseUrl !== acc.baseUrl) {
+      setAccount((cur) => (cur && cur.username === acc.username && cur.baseUrl === acc.baseUrl ? { ...cur, baseUrl } : cur));
+      rememberActive({ ...acc, baseUrl });
+    }
+    return value;
+  }
+
   async function handleLoginSuccess(acc, save = true) {
     const loginId = ++loginNonceRef.current;
-    setAccount(acc);
+    const urls = urlsOf(acc);
+    let session = { ...acc, baseUrls: urls, baseUrl: acc.baseUrl || urls[0] };
+    setAccount(session);
     setLoading(true);
     // Clear the previous account's content so stale data can't linger.
     setMovies([]); setSeries([]); setEpg({});
@@ -301,8 +327,16 @@ export default function App() {
 
     try {
       // Use Xtream Codes JSON API — works even when M3U endpoint is blocked
-      const chs = await window.iptv.loadXtreamChannels(acc.baseUrl, acc.username, acc.password);
+      const { baseUrl, value: chs } = await firstWorking(
+        failoverOrder(urls, session.baseUrl),
+        (u) => window.iptv.loadXtreamChannels(u, acc.username, acc.password)
+      );
       if (loginNonceRef.current !== loginId) return; // superseded by a newer login
+      if (baseUrl !== session.baseUrl) {
+        session = { ...session, baseUrl };
+        setAccount(session);
+        if (!save) rememberActive(session);
+      }
       setChannels(chs);
       setActiveGroup(null);
       showToast(`${chs.length} Kanäle geladen`, 'success');
@@ -316,28 +350,26 @@ export default function App() {
 
     // Load EPG in background (non-blocking) — honor a custom EPG URL from settings.
     const s = await getSettings();
-    window.iptv.loadXMLTVUrl(s.epgUrl || providerEpgUrl(acc))
+    window.iptv.loadXMLTVUrl(s.epgUrl || providerEpgUrl(session))
       .then((data) => { if (stillCurrent()) setEpg(data); })
       .catch(() => {});
 
     // Load VOD + series in background (needed for Filme/Serien)
     setMoviesLoading(true);
-    window.iptv.loadXtreamVod(acc.baseUrl, acc.username, acc.password)
+    viaServers(session, (u) => window.iptv.loadXtreamVod(u, acc.username, acc.password))
       .then((m) => { if (stillCurrent()) setMovies(Array.isArray(m) ? m : []); })
       .catch(() => {})
       .finally(() => { if (stillCurrent()) setMoviesLoading(false); });
 
     setSeriesLoading(true);
-    window.iptv.loadXtreamSeries(acc.baseUrl, acc.username, acc.password)
+    viaServers(session, (u) => window.iptv.loadXtreamSeries(u, acc.username, acc.password))
       .then((s) => { if (stillCurrent()) setSeries(Array.isArray(s) ? s : []); })
       .catch(() => {})
       .finally(() => { if (stillCurrent()) setSeriesLoading(false); });
 
     if (save) {
-      const accToStore = { baseUrl: acc.baseUrl, username: acc.username, password: acc.password };
-      const filtered = savedAccounts.filter(
-        (a) => !(a.baseUrl === accToStore.baseUrl && a.username === accToStore.username)
-      );
+      const accToStore = { baseUrl: session.baseUrl, baseUrls: session.baseUrls, username: acc.username, password: acc.password };
+      const filtered = savedAccounts.filter((a) => !sameAccount(a, accToStore));
       const next = [accToStore, ...filtered].slice(0, 5); // max 5 saved accounts
       setSavedAccounts(next);
       // Persist with passwords encrypted via the OS keyring.
@@ -361,12 +393,13 @@ export default function App() {
     // Drop the auto-login entry too, otherwise a deleted account signs itself
     // back in on the next start.
     const active = await window.iptv.storeGet('activeAccount');
-    if (active && removed && active.baseUrl === removed.baseUrl && active.username === removed.username) {
+    if (active && removed && sameAccount(active, removed)) {
       window.iptv.storeDelete('activeAccount');
     }
   }
 
   function handleLogout() {
+    loginNonceRef.current++; // laufende Login-Ladevorgänge werden stale
     setAccount(null);
     setChannels([]); setMovies([]); setSeries([]);
     setEpg({});
@@ -565,6 +598,7 @@ export default function App() {
           <MovieDetail
             movie={detailItem.item}
             account={account}
+            viaServers={viaServers}
             onPlay={playMovie}
             onBack={() => setDetailItem(null)}
             isFav={favorites.includes(`movie:${detailItem.item.id}`)}
@@ -574,6 +608,7 @@ export default function App() {
           <SeriesDetail
             series={detailItem.item}
             account={account}
+            viaServers={viaServers}
             activeEpisodeId={activePlayable?.type === 'episode' ? activePlayable.id : null}
             onPlayEpisode={playEpisode}
             onBack={() => setDetailItem(null)}

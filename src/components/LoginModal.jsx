@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import BrandMark from './BrandMark.jsx';
+import { parseUrlList, verifyLogin } from '../servers.mjs';
 
 export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, onDeleteAccount }) {
   const [url, setUrl]       = useState('');
@@ -14,43 +15,26 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
   // below falls back to the form on its own while the list is empty.
   const [tab, setTab]           = useState('saved');
 
-  function normalizeUrl(raw) {
-    let u = raw.trim().replace(/\/+$/, '');
-    if (!u.startsWith('http://') && !u.startsWith('https://')) u = 'http://' + u;
-    return u;
-  }
-
   async function handleLogin(e) {
     e.preventDefault();
     setError(null);
-    const baseUrl = normalizeUrl(url);
-    if (!baseUrl || !user.trim() || !pass.trim()) {
+    const baseUrls = parseUrlList(url);
+    if (!baseUrls.length || !user.trim() || !pass.trim()) {
       setError('Bitte alle Felder ausfüllen.');
       return;
     }
     setLoading(true);
     try {
-      // Verify credentials via Xtream Codes API
-      const apiUrl = `${baseUrl}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
-      const info = await window.iptv.fetchXtream(apiUrl);
-      if (info.user_info?.auth === 0) {
-        setError('Ungültige Zugangsdaten.');
-        return;
-      }
-      onLogin({ baseUrl, username: user.trim(), password: pass.trim(), info });
+      // Verify credentials via Xtream Codes API, URL für URL
+      // 2xx ohne JSON: Login ohne API-Prüfung (nur als Rückfall)
+      const { baseUrl, info } = await verifyLogin(baseUrls, (u) =>
+        window.iptv.fetchXtream(`${u}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`)
+      );
+      onLogin({ baseUrl, baseUrls, username: user.trim(), password: pass.trim(), info });
     } catch (err) {
-      const msg = err?.message || '';
-      if (msg.includes('auth')) {
-        setError('Ungültige Zugangsdaten.');
-      } else if (msg.includes('Ungültige JSON-Antwort')) {
-        // The server answered, just not with JSON — it has no player_api.php.
-        // That's a supported setup, so log in without the API check.
-        onLogin({ baseUrl, username: user.trim(), password: pass.trim(), info: null });
-      } else {
-        // Anything else is a genuine connection problem. Logging in regardless
-        // would turn a typo'd URL into an empty app instead of an error.
-        setError('Server nicht erreichbar — bitte URL prüfen.');
-      }
+      // Anything but wrong credentials is a genuine connection problem. Logging
+      // in regardless would turn a typo'd URL into an empty app instead of an error.
+      setError(err?.stop ? 'Ungültige Zugangsdaten.' : 'Server nicht erreichbar — bitte URL prüfen.');
     } finally {
       setLoading(false);
     }
@@ -115,11 +99,11 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
         ) : (
           <form className="login-form" onSubmit={handleLogin}>
             <div className="login-field">
-              <label className="login-label">Server-URL</label>
-              <input
-                className="login-input"
-                type="text"
-                placeholder="http://provider.example.com:8080"
+              <label className="login-label">Server-URLs</label>
+              <textarea
+                className="login-input login-urls"
+                rows={3}
+                placeholder={'http://provider.example.com:8080\nhttp://backup.example.com:8080'}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 autoFocus

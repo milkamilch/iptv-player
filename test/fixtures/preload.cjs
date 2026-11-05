@@ -11,6 +11,22 @@ const delayed = (v) => new Promise((r) => setTimeout(() => r(v), VOD_DELAY));
 // Verzögert nur das Lesen des gemerkten Kanals, damit ein Moduswechsel während des Restores testbar ist.
 const RESTORE_DELAY = Number(process.env.TEST_RESTORE_DELAY || 0);
 
+// Tote Basis-URLs (kommagetrennt): Anfragen daran scheitern wie bei HTTP 503,
+// auf Wunsch erst nach TEST_DEAD_DELAY ms.
+const list = (name) => (process.env[name] || '').split(',').filter(Boolean);
+const DEAD = list('TEST_DEAD_HOSTS');
+const DEAD_DELAY = Number(process.env.TEST_DEAD_DELAY || 0);
+const isDead = (base) => DEAD.includes(base);
+const dead = () => new Promise((_, rej) => setTimeout(() => rej(new Error('HTTP 503')), DEAD_DELAY));
+// Nur Filme (Liste und Info) auf diesen Basis-URLs tot.
+const DEAD_VOD = list('TEST_DEAD_VOD_HOSTS');
+const isDeadVod = (base) => isDead(base) || DEAD_VOD.includes(base);
+// fetchXtream: auth 0 bzw. Antwort ohne JSON; die Aufrufe zählt calls (window.__fetchXtreamCalls()).
+const AUTH0 = list('TEST_AUTH0_HOSTS');
+const NOJSON = list('TEST_NOJSON_HOSTS');
+const onHost = (hosts, url) => hosts.some((b) => url.startsWith(b + '/'));
+let fetchXtreamCalls = 0;
+
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
   chans.push({
@@ -97,15 +113,21 @@ contextBridge.exposeInMainWorld('iptv', {
   storeDelete: async (k) => { delete store[k]; },
   secureEncrypt: async (p) => p,
   secureDecrypt: async (v) => v,
-  fetchXtream: async () => ({ user_info: { auth: 1 } }),
-  loadXtreamChannels: async () => chans,
-  loadXtreamVod: () => delayed(movies),
-  loadXtreamSeries: () => delayed(series),
-  loadXtreamVodInfo: async () => ({ plot: 'p', rating: '0', containerExt: 'mp4' }),
-  loadXtreamSeriesInfo: async () => ({ info: {}, seasons: [] }),
+  fetchXtream: async (url) => {
+    fetchXtreamCalls++;
+    if (onHost(DEAD, url)) return dead();
+    if (onHost(NOJSON, url)) throw new Error('Ungültige JSON-Antwort');
+    return { user_info: { auth: onHost(AUTH0, url) ? 0 : 1 } };
+  },
+  loadXtreamChannels: async (base) => (isDead(base) ? dead() : chans),
+  loadXtreamVod: (base) => (isDeadVod(base) ? dead() : delayed(movies)),
+  loadXtreamSeries: (base) => (isDead(base) ? dead() : delayed(series)),
+  loadXtreamVodInfo: async (base) => (isDeadVod(base) ? dead() : { plot: 'p', rating: '0', containerExt: 'mp4' }),
+  loadXtreamSeriesInfo: async (base) => (isDead(base) ? dead() : { info: {}, seasons: [] }),
   loadXMLTVUrl: async () => epg,
   openXMLTVFile: async () => epg,
   openM3UFile: async () => null,
   loadM3UUrl: async () => [],
   openExternal: async () => {},
 });
+contextBridge.exposeInMainWorld('__fetchXtreamCalls', () => fetchXtreamCalls);

@@ -1,6 +1,6 @@
 # Tests
 
-- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`.
+- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs` und `src/servers.mjs` und `src/fetch-text.mjs`.
 - `npm run test:ui` — baut den Renderer nach `.vite/renderer-test` und fährt ihn in
   Electron hoch, ferngesteuert über das DevTools-Protokoll.
 
@@ -13,6 +13,10 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 | --- | --- | --- |
 | `live` (Standard) | angemeldeter Zugang | Länder- und Kategorienebene (Live, Filme, Serien), Suche, Guide, Virtualisierung |
 | `login` | zwei gespeicherte Zugänge, nicht angemeldet | Login-Bildschirm mit Zugangsliste |
+| `failover-login` | leer, Formular wird im Test ausgefüllt; `dead.example:8080` ist tot (`TEST_DEAD_HOSTS`) | dass auth 0 ohne Wechsel „Ungültige Zugangsdaten.“ meldet, nur tote URLs den Fehler zeigen, bei toter erster URL die zweite übernimmt, die ganze Liste samt aktiver URL gespeichert wird und eine Nicht-JSON-URL nur als Rückfall gilt |
+| `failover-start` | angemeldeter Zugang (auch in `savedAccounts`, plus ein fremder Zugang) mit toter erster und funktionierender zweiter URL | dass der Start auf die zweite wechselt, Kanäle lädt und die URL in `activeAccount` und im passenden gespeicherten Zugang merkt, der fremde unberührt bleibt |
+| `failover-logout` | wie `failover-start`, der Fehler der toten URL kommt erst nach 3 s (`TEST_DEAD_DELAY`) | dass Abmelden während des Wechsels bestehen bleibt |
+| `failover-vod` | angemeldeter Zugang mit URLs a, b; Filme auf a tot (`TEST_DEAD_VOD_HOSTS`) | dass die Filme auf b wechseln, die Sitzung b wird und gemerkt ist |
 | `live-restore` | angemeldeter Zugang **plus** `lastCountry: 'DE'` | dass der Start direkt in die Kategorienliste des gemerkten Landes trägt statt in die Länderliste |
 | `live-restore-channel` | wie oben, **plus** `lastChannel` = Kanal 7 (FR — widerspricht `lastCountry`) | dass der wiederhergestellte Kanal die Leiste in sein Land („Alle“) zieht und der Store nachgeführt wird |
 | `live-restore-switch` | angemeldeter Zugang plus `lastChannel` = Kanal 7, dessen Lesen 6 s dauert (`TEST_RESTORE_DELAY`) | dass ein Wechsel nach Filme während des Lesens den Restore abbricht und kein Live-Sender anläuft |
@@ -31,6 +35,11 @@ als erste Ebene bzw. „Alle“ für den Kanal, keine Länder-Breadcrumb) statt 
 | `TEST_CHANNELS` | `420` | Anzahl der Fixture-Kanäle. Ab `> 400` Kanälen im aktiven Land greift die Tiefen-Navigations-Prüfung (`Pfeiltasten über Position 300`); darunter meldet sie SKIP. Für Virtualisierung und Guide-Budget: `TEST_CHANNELS=20000`. |
 | `TEST_PREFIXED` | `1` | `0` erzeugt Kategorien **ohne** Länderpräfix (`Sport` statt `DE \| Sport`) und Film-/Serientitel ohne Präfix (`Street Fighter` statt `DE - Street Fighter`). Damit fällt die Länderebene weg (ein einziger Eimer ⇒ `countryIndex.enabled === false`) und die Sidebar beginnt mit der Kategorienliste. |
 | `TEST_EPG_KEYS` | `3000` | Anzahl der XMLTV-Kanalschlüssel im Fixture-EPG (je 8 Sendungen à 90 min, jeder siebte Kanal fehlt absichtlich). Die Kosten des Namens-Fallbacks in `matchProgrammes` sind Kanäle × Schlüssel — ein kleines EPG macht die Guide-Performance-Prüfung stumpf. |
+| `TEST_DEAD_HOSTS` | leer | Kommagetrennte Basis-URLs, an denen die Fake-Bridge wie bei HTTP 503 scheitert. Setzt `ui-smoke.mjs` für die `failover-*`-Szenarien selbst. |
+| `TEST_DEAD_DELAY` | `0` | Millisekunden, nach denen eine tote Basis-URL scheitert. Setzt `ui-smoke.mjs` für `failover-logout` selbst. |
+| `TEST_DEAD_VOD_HOSTS` | leer | Basis-URLs, an denen nur Filme (Liste und Info) scheitern. Setzt `ui-smoke.mjs` für `failover-vod` selbst. |
+| `TEST_AUTH0_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` `auth 0` liefert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
+| `TEST_NOJSON_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` mit „Ungültige JSON-Antwort“ scheitert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
 | `RENDERER_DIST` | `.vite/renderer-test` | Verzeichnis des gebauten Renderers. |
 
 Sinnvolle Kombinationen (so laufen sie auch in CI):
@@ -41,6 +50,10 @@ TEST_CHANNELS=20000 npm run test:ui
 TEST_PREFIXED=0 npm run test:ui
 TEST_PREFIXED=0 TEST_CHANNELS=20000 npm run test:ui
 SCENARIO=login npm run test:ui
+SCENARIO=failover-login npm run test:ui
+SCENARIO=failover-start npm run test:ui
+SCENARIO=failover-logout npm run test:ui
+SCENARIO=failover-vod npm run test:ui
 SCENARIO=live-restore npm run test:ui
 SCENARIO=live-restore-channel npm run test:ui
 SCENARIO=vod-delay npm run test:ui

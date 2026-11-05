@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onToggleFav }) {
+export default function MovieDetail({ movie, account, viaServers, onPlay, onBack, isFav, onToggleFav }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -8,8 +8,7 @@ export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onT
     let alive = true;
     setLoading(true);
     setDetail(null);
-    window.iptv
-      .loadXtreamVodInfo(account.baseUrl, account.username, account.password, movie.id)
+    viaServers(account, (u) => window.iptv.loadXtreamVodInfo(u, account.username, account.password, movie.id))
       .then((d) => { if (alive) setDetail(d); })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
