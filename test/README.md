@@ -15,6 +15,7 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 | `login` | zwei gespeicherte Zugänge, nicht angemeldet | Login-Bildschirm mit Zugangsliste |
 | `live-restore` | angemeldeter Zugang **plus** `lastCountry: 'DE'` | dass der Start direkt in die Kategorienliste des gemerkten Landes trägt statt in die Länderliste |
 | `live-restore-channel` | wie oben, **plus** `lastChannel` = Kanal 7 (FR — widerspricht `lastCountry`) | dass der wiederhergestellte Kanal die Leiste in sein Land („Alle“) zieht und der Store nachgeführt wird |
+| `live-restore-switch` | angemeldeter Zugang plus `lastChannel` = Kanal 7, dessen Lesen 6 s dauert (`TEST_RESTORE_DELAY`) | dass ein Wechsel nach Filme während des Lesens den Restore abbricht und kein Live-Sender anläuft |
 | `vod-delay` | wie `live`, Start in Filme, Filme laden 6 s verzögert (`TEST_VOD_DELAY`), `lastCountry: 'DE'` | dass „Weiter“, in der Ladephase angeklickt, nach dem Laden in der Kategorienliste des Landes endet statt in einer leeren Liste |
 
 Die `live-restore*`- und `vod-delay`-Szenarien setzen Länderpräfixe in den Fixtures voraus. Mit

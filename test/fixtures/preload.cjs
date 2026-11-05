@@ -8,6 +8,8 @@ const LANDS = ['DE', 'US', 'TR', 'FR'];
 // Verzögert Filme/Serien, damit Eingaben in der Ladephase testbar sind.
 const VOD_DELAY = Number(process.env.TEST_VOD_DELAY || 0);
 const delayed = (v) => new Promise((r) => setTimeout(() => r(v), VOD_DELAY));
+// Verzögert nur das Lesen des gemerkten Kanals, damit ein Moduswechsel während des Restores testbar ist.
+const RESTORE_DELAY = Number(process.env.TEST_RESTORE_DELAY || 0);
 
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
@@ -86,7 +88,9 @@ const series = [
 ];
 
 contextBridge.exposeInMainWorld('iptv', {
-  storeGet: async (k) => store[k],
+  storeGet: async (k) => (k === 'lastChannel' && RESTORE_DELAY
+    ? new Promise((r) => setTimeout(() => r(store[k]), RESTORE_DELAY))
+    : store[k]),
   storeSet: async (k, v) => { store[k] = v; },
   storeDelete: async (k) => { delete store[k]; },
   secureEncrypt: async (p) => p,
