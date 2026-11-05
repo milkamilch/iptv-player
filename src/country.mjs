@@ -41,7 +41,8 @@ const ALIASES = { UK: 'GB', USA: 'US', GER: 'DE', AUT: 'AT', SUI: 'CH', ESP: 'ES
 const PREFIX_RE = /^\s*([A-Za-z]{2,3})\s*[|\-:/>]\s*(.+)$/;
 
 /** Zerlegt einen Gruppennamen in Ländercode und Kategorienamen ohne Präfix. */
-export function parseCategory(group) {
+// upperOnly: nur großgeschriebene Codes, damit Titel wie "It: …" kein Land bekommen (#5).
+export function parseCategory(group, { upperOnly = false } = {}) {
   const raw = typeof group === 'string' ? group.trim() : '';
   if (!raw) return { code: OTHER, category: 'Alle' };
 
@@ -49,6 +50,7 @@ export function parseCategory(group) {
   if (!m) return { code: OTHER, category: raw };
 
   const upper = m[1].toUpperCase();
+  if (upperOnly && m[1] !== upper) return { code: OTHER, category: raw };
   const code = ALIASES[upper] || upper;
   // Unbekanntes Präfix: kein Land, und der Name bleibt vollständig erhalten.
   if (!COUNTRIES[code]) return { code: OTHER, category: raw };
@@ -66,7 +68,7 @@ export function buildCountryIndex(channels, { titlePrefix = false } = {}) {
   for (const ch of channels || []) {
     let parsed = parseCategory(ch.group);
     if (titlePrefix && parsed.code === OTHER) {
-      const fromTitle = parseCategory(ch.name);
+      const fromTitle = parseCategory(ch.name, { upperOnly: true });
       if (fromTitle.code !== OTHER) parsed = { code: fromTitle.code, category: parsed.category };
     }
     meta.set(ch.id, parsed);

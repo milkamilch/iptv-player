@@ -138,6 +138,18 @@ test('unbekannte oder fehlende Titelpräfixe landen in Sonstige', () => {
   for (const it of items) assert.equal(index.meta.get(it.id).code, OTHER);
 });
 
+test('Titel, die mit einem normalen Wort beginnen, bekommen kein Land', () => {
+  const items = [
+    { id: '1', name: 'It: Capítulo 2 (2019)', group: 'X' },
+    { id: '2', name: 'In - Bruges (2008)', group: 'X' },
+    { id: '3', name: 'IT - La vita è bella (1997)', group: 'X' },
+  ];
+  const index = buildCountryIndex(items, { titlePrefix: true });
+  assert.equal(index.meta.get('1').code, OTHER);
+  assert.equal(index.meta.get('2').code, OTHER);
+  assert.equal(index.meta.get('3').code, 'IT');
+});
+
 test('categoryCounts liefert beim Titel-Land die Kategorie, nicht den Titel', () => {
   const items = [
     { id: '1', name: 'DE - Haustausch (2026) (SE)', group: 'GERMANY NETFLIX' },
