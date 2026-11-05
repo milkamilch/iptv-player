@@ -681,6 +681,7 @@ button:active:not(:disabled) { transform: translateY(1px); }
 .login-input:disabled { background: var(--color-paper-2); color: var(--color-muted); box-shadow: inset 0 0 0 1.5px var(--color-rule); cursor: not-allowed; }
 .login-pass-row { position: relative; display: flex; }
 .login-pass-row .login-input { flex: 1; padding-right: 48px; }
+.login-urls { resize: vertical; min-height: 64px; line-height: 1.4; padding: var(--space-xs) var(--space-md); border-radius: 12px; }
 .pass-toggle {
   position: absolute; right: var(--space-xs); top: 50%; transform: translateY(-50%);
   width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;

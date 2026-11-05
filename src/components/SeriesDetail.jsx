@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getHistory, getWatched, playableKey } from '../progress.js';
 import Icon from './Icon.jsx';
 
-export default function SeriesDetail({ series, account, activeEpisodeId, onPlayEpisode, onBack, isFav, onToggleFav }) {
+export default function SeriesDetail({ series, account, viaServers, activeEpisodeId, onPlayEpisode, onBack, isFav, onToggleFav }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState(null);
@@ -15,7 +15,7 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
     setData(null);
     setSeason(null);
     Promise.all([
-      window.iptv.loadXtreamSeriesInfo(account.baseUrl, account.username, account.password, series.id),
+      viaServers(account, (u) => window.iptv.loadXtreamSeriesInfo(u, account.username, account.password, series.id)),
       getHistory(),
       getWatched(),
     ])
