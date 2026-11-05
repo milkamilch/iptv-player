@@ -25,6 +25,13 @@ test('EN ist kein Land — das ist die Sprache, nicht Großbritannien', () => {
   assert.equal(r.category, 'EN | Sport');
 });
 
+test('AR ist Arabisch, nicht Argentinien', () => {
+  const item = { id: '1', name: 'AR-SUBS - Street Fighter (1994)', group: 'NETFLIX MOVIES' };
+  const index = buildCountryIndex([item], { titlePrefix: true });
+  assert.equal(parseCategory('AR| BEIN SPORTS').code, 'AR');
+  assert.deepEqual(index.countries.find((c) => c.code === 'AR'), { code: 'AR', name: 'Arabisch', flag: '🌐', count: 1 });
+});
+
 test('unbekannte Codes sind kein Land und behalten den vollen Namen', () => {
   for (const g of ['XX | Irgendwas', 'HD | Sport', 'VIP - Kino', '4K: Filme']) {
     const r = parseCategory(g);

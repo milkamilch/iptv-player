@@ -7,6 +7,7 @@ export const CONTINUE = '__continue__';
 
 // Nur Codes aus dieser Tabelle gelten als Land. Alles andere landet in "Sonstige",
 // damit Präfixe wie "HD", "VIP" oder "4K" keine Fantasieländer erzeugen.
+// AR ist die Ausnahme: Provider meinen damit Arabisch, nicht Argentinien (#4).
 const COUNTRIES = {
   DE: ['Deutschland', '🇩🇪'], AT: ['Österreich', '🇦🇹'], CH: ['Schweiz', '🇨🇭'],
   GB: ['Großbritannien', '🇬🇧'], IE: ['Irland', '🇮🇪'], FR: ['Frankreich', '🇫🇷'],
@@ -24,7 +25,7 @@ const COUNTRIES = {
   SA: ['Saudi-Arabien', '🇸🇦'], EG: ['Ägypten', '🇪🇬'], MA: ['Marokko', '🇲🇦'],
   DZ: ['Algerien', '🇩🇿'], TN: ['Tunesien', '🇹🇳'], ZA: ['Südafrika', '🇿🇦'],
   NG: ['Nigeria', '🇳🇬'], US: ['USA', '🇺🇸'], CA: ['Kanada', '🇨🇦'],
-  MX: ['Mexiko', '🇲🇽'], BR: ['Brasilien', '🇧🇷'], AR: ['Argentinien', '🇦🇷'],
+  MX: ['Mexiko', '🇲🇽'], BR: ['Brasilien', '🇧🇷'], AR: ['Arabisch', '🌐'],
   CL: ['Chile', '🇨🇱'], CO: ['Kolumbien', '🇨🇴'], IN: ['Indien', '🇮🇳'],
   PK: ['Pakistan', '🇵🇰'], BD: ['Bangladesch', '🇧🇩'], CN: ['China', '🇨🇳'],
   JP: ['Japan', '🇯🇵'], KR: ['Südkorea', '🇰🇷'], TH: ['Thailand', '🇹🇭'],
