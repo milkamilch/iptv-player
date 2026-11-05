@@ -124,11 +124,14 @@ export default function App() {
   // gewinnt, sonst zeigt die Liste ein Land, in dem der Kanal nicht vorkommt.
   useEffect(() => {
     if (!channels.length || activePlayable || mode !== 'live') return;
+    // Ein Moduswechsel während des Lesens bricht den Restore ab (#7).
+    let cancelled = false;
     window.iptv.storeGet('lastChannel').then((saved) => {
-      if (!saved) return;
+      if (cancelled || !saved) return;
       const ch = channels.find((c) => c.id === saved.id);
       if (ch) selectChannel(ch);
     });
+    return () => { cancelled = true; };
   }, [channels, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounce the global search so large lists aren't re-filtered on every keystroke.

@@ -64,6 +64,13 @@ const STORES = {
     lastCountry: 'DE',
     lastChannel: { id: '7', name: 'Kanal 7' },
   },
+  // Gemerkter Kanal, dessen Lesen 6 s dauert (TEST_RESTORE_DELAY, siehe spawn
+  // unten): wer in der Zeit nach Filme wechselt, darf keinen Live-Sender hören.
+  'live-restore-switch': {
+    activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+    lastChannel: { id: '7', name: 'Kanal 7' },
+  },
   // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
   // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
   'vod-delay': {
@@ -190,6 +197,7 @@ async function run() {
         APP_URL: `http://127.0.0.1:${HTTP_PORT}/index.html`,
         TEST_STORE: JSON.stringify(STORES[SCENARIO]),
         TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
+        TEST_RESTORE_DELAY: SCENARIO === 'live-restore-switch' ? '6000' : '0',
       },
     },
   );
@@ -301,6 +309,18 @@ async function run() {
       const persisted = await ev(`window.iptv.storeGet('lastCountry')`);
       check('das nachgezogene Land landet auch im Store', persisted === 'FR', String(persisted));
     }
+  }
+
+  if (SCENARIO === 'live-restore-switch') {
+    console.log('\nSzenario: Moduswechsel während des Kanal-Restores');
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+    await wait(7000);
+    const v = await json(`({
+      empty: !!document.querySelector('.video-empty'),
+      placeholder: document.querySelector('.search-input')?.placeholder || null,
+    })`);
+    check('Wechsel nach Filme verhindert den Restore des Live-Senders',
+      v.empty && v.placeholder === 'Filme suchen…', JSON.stringify(v));
   }
 
   if (SCENARIO === 'live') {
