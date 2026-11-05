@@ -71,6 +71,12 @@ const STORES = {
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
     lastChannel: { id: '7', name: 'Kanal 7' },
   },
+  // Wie oben, aber in der Zeit wird von Hand ein anderer Sender gewählt.
+  'live-restore-manual': {
+    activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+    lastChannel: { id: '7', name: 'Kanal 7' },
+  },
   // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
   // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
   'vod-delay': {
@@ -197,7 +203,7 @@ async function run() {
         APP_URL: `http://127.0.0.1:${HTTP_PORT}/index.html`,
         TEST_STORE: JSON.stringify(STORES[SCENARIO]),
         TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
-        TEST_RESTORE_DELAY: SCENARIO === 'live-restore-switch' ? '6000' : '0',
+        TEST_RESTORE_DELAY: ['live-restore-switch', 'live-restore-manual'].includes(SCENARIO) ? '6000' : '0',
       },
     },
   );
@@ -321,6 +327,21 @@ async function run() {
     })`);
     check('Wechsel nach Filme verhindert den Restore des Live-Senders',
       v.empty && v.placeholder === 'Filme suchen…', JSON.stringify(v));
+  }
+
+  if (SCENARIO === 'live-restore-manual') {
+    console.log('\nSzenario: Handwahl während des Kanal-Restores');
+    await ev(`(() => {
+      const inp = document.querySelector('.search-input');
+      const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      set.call(inp, 'Kanal 8'); inp.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await waitUntil(() => ev(`!!document.querySelector('.result-card')`), (v) => v === true);
+    await ev(`[...document.querySelectorAll('.result-card')]
+      .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 8')?.click()`);
+    await wait(7000);
+    const tag = await ev(`document.querySelector('.live-tag-text')?.textContent || null`);
+    check('von Hand gewählter Sender bleibt nach dem Restore', tag === 'LIVE · Kanal 8', String(tag));
   }
 
   if (SCENARIO === 'live') {

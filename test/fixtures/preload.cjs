@@ -88,9 +88,11 @@ const series = [
 ];
 
 contextBridge.exposeInMainWorld('iptv', {
-  storeGet: async (k) => (k === 'lastChannel' && RESTORE_DELAY
-    ? new Promise((r) => setTimeout(() => r(store[k]), RESTORE_DELAY))
-    : store[k]),
+  // Wert beim Aufruf lesen wie der echte Store, nur die Antwort kommt später.
+  storeGet: async (k) => {
+    const v = store[k];
+    return k === 'lastChannel' && RESTORE_DELAY ? new Promise((r) => setTimeout(() => r(v), RESTORE_DELAY)) : v;
+  },
   storeSet: async (k, v) => { store[k] = v; },
   storeDelete: async (k) => { delete store[k]; },
   secureEncrypt: async (p) => p,
