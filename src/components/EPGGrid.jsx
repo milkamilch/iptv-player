@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { matchProgrammes, parseXMLTVDate } from '../epg.js';
 import { useVirtualRows } from '../useVirtualRows.js';
+import Icon from './Icon.jsx';
 
 const PPM = 6;                 // pixels per minute (30 min = 180px)
 const LABEL_W = 180;           // channel column width
@@ -114,10 +115,10 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
       <div className="epg-grid-panel" role="dialog" aria-modal="true" aria-label="TV-Guide">
       <div className="epg-grid-bar">
         <span className="epg-grid-title">TV-Guide</span>
-        <span className="epg-grid-sub">{channels.length} Kanäle · heute</span>
+        <span className="epg-grid-sub">{channels.length} Kanäle, heute</span>
         <div className="epg-grid-bar-spacer" />
         <button className="guide-now-btn" onClick={scrollToNow} title="Zur aktuellen Zeit">Jetzt</button>
-        <button className="guide-close" onClick={onClose} title="Schließen (Esc)">✕</button>
+        <button className="guide-close" onClick={onClose} title="Schließen (Esc)" aria-label="Schließen"><Icon name="close" size={16} /></button>
       </div>
 
       <div className="epg-grid-scroll" ref={setScrollEl}>

@@ -3,6 +3,7 @@ import Hls from 'hls.js';
 import EPGBar from './EPGBar.jsx';
 import { getHistory, upsertHistory, removeHistory, markWatched, playableKey, HLS_BUFFER } from '../progress.js';
 import { createAutoHide, PLAYER_BAR_IDLE_MS } from '../autohide.mjs';
+import Icon from './Icon.jsx';
 
 // Build the "continue watching" card + rebuild info from the active playable.
 function cardFor(ch) {
@@ -244,7 +245,7 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
       {!channel && (
         <div className="video-empty">
           <div className="video-scanline" />
-          <p className="video-empty-title">LIVE FEED</p>
+          <p className="video-empty-title">Kein Sender gewählt</p>
           <p className="video-empty-sub">Wähle links einen Kanal, Film oder eine Serie</p>
         </div>
       )}
@@ -266,7 +267,7 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
 
       {error && (
         <div className="video-overlay video-error">
-          <span>⚠ {error}</span>
+          <span className="video-error-msg"><Icon name="alert" size={18} />{error}</span>
           <button onClick={() => { setError(null); setRetryNonce((n) => n + 1); }}>Neu versuchen</button>
         </div>
       )}
@@ -279,10 +280,10 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
             <p className="resume-time">Zuletzt bei <strong>{fmtTime(resumePos)}</strong></p>
             <div className="resume-actions">
               <button className="resume-btn-primary" onClick={handleResume}>
-                ▶ Fortsetzen
+                <Icon name="play" size={16} filled />Fortsetzen
               </button>
               <button className="resume-btn-secondary" onClick={handleRestartFromBeginning}>
-                ↺ Von vorne
+                <Icon name="restart" size={16} />Von vorne
               </button>
             </div>
           </div>
@@ -299,17 +300,18 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
             ? <EPGBar channel={channel} epg={epg} />
             : <span className="player-bar-name">{channel.name}</span>}
           <div className="player-ctrl">
-            <button className="ctrl-btn" onClick={handleMuteToggle} title="Ton">
-              {muted ? '🔇' : '🔊'}
+            <button className="ctrl-btn" onClick={handleMuteToggle} title="Ton" aria-label={muted ? "Ton an" : "Ton aus"}>
+              <Icon name={muted ? 'mute' : 'volume'} />
             </button>
             <input
               className="volume-slider"
+              aria-label="Lautstärke"
               type="range" min="0" max="1" step="0.05"
               value={muted ? 0 : volume}
               onChange={handleVolumeChange}
             />
-            <button className="ctrl-btn" onClick={handleFullscreen} title="Vollbild">
-              {fullscreen ? '⊡' : '⛶'}
+            <button className="ctrl-btn" onClick={handleFullscreen} title="Vollbild" aria-label="Vollbild">
+              <Icon name={fullscreen ? 'shrink' : 'expand'} />
             </button>
           </div>
         </div>

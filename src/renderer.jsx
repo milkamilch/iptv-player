@@ -1,10 +1,7 @@
-import '@fontsource/space-grotesk/400.css';
-import '@fontsource/space-grotesk/500.css';
-import '@fontsource/space-grotesk/600.css';
-import '@fontsource/space-grotesk/700.css';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/500.css';
-import '@fontsource/jetbrains-mono/600.css';
+import '@fontsource/outfit/300.css';
+import '@fontsource/outfit/500.css';
+import '@fontsource/onest/400.css';
+import '@fontsource/onest/500.css';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 

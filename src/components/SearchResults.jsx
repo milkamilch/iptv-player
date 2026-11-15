@@ -31,7 +31,7 @@ function Section({ title, type, items, loading, onSelect }) {
   );
 }
 
-const SECTIONS = { live: ['SENDER', 'live'], movies: ['FILME', 'movie'], series: ['SERIEN', 'series'] };
+const SECTIONS = { live: ['Sender', 'live'], movies: ['Filme', 'movie'], series: ['Serien', 'series'] };
 
 export default function SearchResults({ query, mode, items, loading, onSelect }) {
   const q = query.trim().toLowerCase();

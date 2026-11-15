@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import BrandMark from './BrandMark.jsx';
+import Icon from './Icon.jsx';
 
 export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, onDeleteAccount }) {
   const [url, setUrl]       = useState('');
@@ -94,7 +95,7 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
                 className="saved-account-row"
                 onClick={() => onSelectAccount(acc)}
               >
-                <div className="saved-acc-avatar" style={i === 0 ? undefined : { background: 'linear-gradient(135deg,#3a3a42,#26262b)', color: '#9a9aa2' }}>
+                <div className={`saved-acc-avatar ${i === 0 ? '' : 'saved-acc-avatar-alt'}`}>
                   {hostOf(acc)[0]?.toUpperCase() || '?'}
                 </div>
                 <div className="saved-acc-info">
@@ -105,7 +106,8 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
                   className="saved-acc-delete"
                   onClick={(e) => { e.stopPropagation(); onDeleteAccount(i); }}
                   title="Zugang löschen"
-                >✕</button>
+                  aria-label="Zugang löschen"
+                ><Icon name="close" size={14} /></button>
               </div>
             ))}
             <button className="login-new-btn" onClick={() => setTab('new')}>
@@ -155,8 +157,9 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
                   className="pass-toggle"
                   onClick={() => setShowPass((v) => !v)}
                   tabIndex={-1}
+                  aria-label={showPass ? 'Passwort verbergen' : 'Passwort zeigen'}
                 >
-                  {showPass ? '🙈' : '👁'}
+                  <Icon name={showPass ? 'eyeOff' : 'eye'} size={16} />
                 </button>
               </div>
             </div>

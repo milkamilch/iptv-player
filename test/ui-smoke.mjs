@@ -341,7 +341,7 @@ async function run() {
       .find(c => c.querySelector('.result-name')?.textContent === 'Kanal 8')?.click()`);
     await wait(7000);
     const tag = await ev(`document.querySelector('.live-tag-text')?.textContent || null`);
-    check('von Hand gewählter Sender bleibt nach dem Restore', tag === 'LIVE · Kanal 8', String(tag));
+    check('von Hand gewählter Sender bleibt nach dem Restore', tag === 'Kanal 8', String(tag));
   }
 
   if (SCENARIO === 'live') {
@@ -527,8 +527,18 @@ async function run() {
       video: !!document.querySelector('video.video-el'),
     })`);
     check('Suche beendet die Wiedergabe nicht', during.results && during.video, JSON.stringify(during));
-    const nameColor = await ev(`(() => { const e = document.querySelector('.result-name'); return e ? getComputedStyle(e).color : null; })()`);
-    check('Treffernamen in Textfarbe', nameColor === 'rgb(236, 236, 239)', String(nameColor));
+    // Gegen das Text-Token, nicht gegen einen festen Wert: die Farbe kommt aus tokens.css (#22).
+    const nameColor = await json(`(() => {
+      const e = document.querySelector('.result-name');
+      if (!e) return null;
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--color-ink)';
+      document.body.appendChild(probe);
+      const ink = getComputedStyle(probe).color;
+      probe.remove();
+      return { name: getComputedStyle(e).color, ink };
+    })()`);
+    check('Treffernamen in Textfarbe', !!nameColor && nameColor.name === nameColor.ink, JSON.stringify(nameColor));
 
     await key('Escape');
     await wait(600);
@@ -574,7 +584,7 @@ async function run() {
     })`);
     check('Filme-Suche findet nur Filme',
       movieHitsForChannel === 0 && movieSearch.cards === 1 &&
-      movieSearch.heads.length === 1 && movieSearch.heads[0].startsWith('FILME'),
+      movieSearch.heads.length === 1 && movieSearch.heads[0].startsWith('Filme'),
       JSON.stringify({ movieHitsForChannel, ...movieSearch }));
     await key('Escape');
     await wait(400);
@@ -582,14 +592,14 @@ async function run() {
     await wait(500);
     await pick('Alle');
 
-    await ev(`[...document.querySelectorAll('.tb-icon-pill')].find(b => b.textContent === '⚙').click()`);
+    await ev(`document.querySelector('.tb-icon-pill[title="Einstellungen"]').click()`);
     await wait(500);
     const sOpen = await ev(`!!document.querySelector('.settings-box')`);
     await key('Escape');
     await wait(500);
     check('Esc schließt Einstellungen', sOpen === true && (await ev(`!document.querySelector('.settings-box')`)) === true);
 
-    await ev(`[...document.querySelectorAll('.tb-icon-pill')].find(b => b.textContent === '＋').click()`);
+    await ev(`document.querySelector('.tb-icon-pill[title="Playlist / EPG laden / neu laden"]').click()`);
     await wait(400);
     const mOpen = await ev(`!!document.querySelector('.tb-menu')`);
     await ev(`document.querySelector('.sidebar').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`);
@@ -886,7 +896,7 @@ async function run() {
       );
       const storedCountry = await waitUntil(() => ev(`window.iptv.storeGet('lastCountry')`), (v) => v === 'FR');
       check('Live-Treffer trägt in das Land des Kanals',
-        JSON.stringify(heads) === '["SENDER"]' && clickedHit === true &&
+        JSON.stringify(heads) === '["Sender"]' && clickedHit === true &&
         afterHit.crumb === 'Alle Länder›Frankreich›Alle' && afterHit.active === 'Kanal 7' &&
         /Kanal 7$/.test(afterHit.tag || '') && storedCountry === 'FR',
         JSON.stringify({ heads, afterHit, storedCountry }));
