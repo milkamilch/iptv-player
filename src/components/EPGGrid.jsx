@@ -152,7 +152,7 @@ export default function EPGGrid({ channels, epg, activeChannel, onSelect, onClos
                 title={ch.name}
               >
                 {ch.logo
-                  ? <img className="epg-grid-logo" src={ch.logo} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
+                  ? <img className="epg-grid-logo" src={ch.logo} alt="" onError={(e) => { e.target.style.visibility = 'hidden'; }} />
                   : <div className="epg-grid-logo-ph" />}
                 <span className="epg-grid-chname">{ch.name}</span>
               </div>
