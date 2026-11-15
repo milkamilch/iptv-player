@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import EPGBar from './EPGBar.jsx';
 import { getHistory, upsertHistory, removeHistory, markWatched, playableKey, HLS_BUFFER } from '../progress.js';
+import { createAutoHide, PLAYER_BAR_IDLE_MS } from '../autohide.mjs';
 
 // Build the "continue watching" card + rebuild info from the active playable.
 function cardFor(ch) {
@@ -33,6 +34,8 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
   const hlsRef      = useRef(null);
   const saveTimerRef = useRef(null);
   const posKeyRef   = useRef(null);   // history key of the stream currently loaded
+  const autoHideRef = useRef(null);   // hides the player bar after PLAYER_BAR_IDLE_MS without mouse movement
+  const [barVisible, setBarVisible] = useState(true);
   const [error, setError]         = useState(null);
   const [loading, setLoading]     = useState(false);
   const [muted, setMuted]         = useState(false);
@@ -48,6 +51,24 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  // Player bar auto-hide. Listen on document: covers sidebar/toolbar overlays and fullscreen.
+  useEffect(() => {
+    const ah = createAutoHide({ delayMs: PLAYER_BAR_IDLE_MS, onChange: setBarVisible });
+    autoHideRef.current = ah;
+    const onMove = () => ah.activity();
+    document.addEventListener('mousemove', onMove);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      ah.dispose();
+    };
+  }, []);
+
+  // A new channel shows the bar for the idle period; without a channel drop a stale hover hold.
+  useEffect(() => {
+    if (channel) autoHideRef.current.activity();
+    else autoHideRef.current.release();
+  }, [channel]);
 
   // Persist playback progress (position + "continue watching" card).
   function savePosition(key, seconds, duration, card) {
@@ -269,7 +290,11 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
       )}
 
       {channel && (
-        <div className="player-bar">
+        <div
+          className={`player-bar ${barVisible ? '' : 'bar-hidden'}`}
+          onMouseEnter={() => autoHideRef.current.hold()}
+          onMouseLeave={() => autoHideRef.current.release()}
+        >
           {showEpg && channel.type === 'live' && epg
             ? <EPGBar channel={channel} epg={epg} />
             : <span className="player-bar-name">{channel.name}</span>}

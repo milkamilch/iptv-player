@@ -502,6 +502,20 @@ async function run() {
     const sel = await ev(`document.querySelector('.channel-item.active .channel-name')?.textContent || null`);
     check('Kanalauswahl markiert die Zeile', sel === names[1], `${sel} erwartet ${names[1]}`);
 
+    // Player-Leiste: sichtbar nach der Kanalwahl, nach 3 s ohne Maus weg, Mausbewegung holt sie zurück.
+    // Geprüft werden Klasse und pointer-events, nicht die Opazität (Fenster ist unsichtbar, Übergang unzuverlässig).
+    const readBar = () => json(`(() => { const b = document.querySelector('.player-bar'); return b ? { hidden: b.classList.contains('bar-hidden'), pe: getComputedStyle(b).pointerEvents } : null; })()`);
+    const barShown = await readBar();
+    check('Player-Leiste ist nach der Kanalwahl sichtbar',
+      barShown?.hidden === false && barShown.pe === 'auto', JSON.stringify(barShown));
+    const barIdle = await waitUntil(readBar, (v) => v?.hidden, 6000);
+    check('Player-Leiste blendet ohne Mausbewegung aus und nimmt keine Klicks',
+      barIdle?.hidden === true && barIdle.pe === 'none', JSON.stringify(barIdle));
+    await ev(`document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))`);
+    const barBack = await waitUntil(readBar, (v) => v && !v.hidden);
+    check('Mausbewegung blendet die Player-Leiste wieder ein',
+      barBack?.hidden === false && barBack.pe === 'auto', JSON.stringify(barBack));
+
     await ev(`(() => {
       const inp = document.querySelector('.search-input');
       const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;

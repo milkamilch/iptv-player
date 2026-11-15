@@ -1,6 +1,6 @@
 # Tests
 
-- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`.
+- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs` und `src/autohide.mjs`.
 - `npm run test:ui` — baut den Renderer nach `.vite/renderer-test` und fährt ihn in
   Electron hoch, ferngesteuert über das DevTools-Protokoll.
 
@@ -11,7 +11,7 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 
 | Wert | Store beim Start | Prüft |
 | --- | --- | --- |
-| `live` (Standard) | angemeldeter Zugang | Länder- und Kategorienebene (Live, Filme, Serien), Suche, Guide, Virtualisierung |
+| `live` (Standard) | angemeldeter Zugang | Länder- und Kategorienebene (Live, Filme, Serien), Suche, Guide, Virtualisierung, Ausblenden der Player-Leiste |
 | `login` | zwei gespeicherte Zugänge, nicht angemeldet | Login-Bildschirm mit Zugangsliste |
 | `live-restore` | angemeldeter Zugang **plus** `lastCountry: 'DE'` | dass der Start direkt in die Kategorienliste des gemerkten Landes trägt statt in die Länderliste |
 | `live-restore-channel` | wie oben, **plus** `lastChannel` = Kanal 7 (FR — widerspricht `lastCountry`) | dass der wiederhergestellte Kanal die Leiste in sein Land („Alle“) zieht und der Store nachgeführt wird |
