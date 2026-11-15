@@ -602,12 +602,14 @@ export default function App() {
       {mode === 'live' && activeLiveChannel && !searching && !detailItem && (
         <div className="live-tag">
           <span className="live-tag-dot" />
-          <span className="live-tag-text">LIVE · {activeLiveChannel.name}</span>
+          <span className="live-tag-label">Live</span>
+          <span className="live-tag-text">{activeLiveChannel.name}</span>
         </div>
       )}
 
       <button className="account-chip" onClick={handleLogout} title="Abmelden">
-        {account.username}@{host} · Abmelden
+        <span className="account-chip-user">{account.username}@{host}</span>
+        <span className="account-chip-action">Abmelden</span>
       </button>
 
       <Sidebar

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getHistory, getWatched, playableKey } from '../progress.js';
+import Icon from './Icon.jsx';
 
 export default function SeriesDetail({ series, account, activeEpisodeId, onPlayEpisode, onBack, isFav, onToggleFav }) {
   const [data, setData] = useState(null);
@@ -56,26 +57,27 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
 
   return (
     <div className="detail">
-      <button className="detail-back" onClick={onBack}>← Zurück</button>
+      <button className="detail-back" onClick={onBack}><Icon name="back" size={16} />Zurück</button>
       <div className="detail-head">
         {cover
           ? <img className="detail-poster" src={cover} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
           : <div className="detail-poster detail-poster-ph" />}
         <div className="detail-info">
           <h1 className="detail-title">{series.name}</h1>
-          {meta.length > 0 && <div className="detail-meta">{meta.join(' · ')}</div>}
-          {showRating && <div className="detail-rating">★ {rating}</div>}
+          {meta.length > 0 && <div className="detail-meta">{meta.map((m) => <span key={m}>{m}</span>)}</div>}
+          {showRating && <div className="detail-rating"><Icon name="star" size={14} filled />{rating}</div>}
           <div className="detail-actions">
             {resume && (
               <button className="detail-play" onClick={() => play(resume.ep, resume.season)}>
-                ▶ Fortsetzen · S{resume.season} E{resume.ep.episodeNum}
+                <Icon name="play" size={16} filled />Fortsetzen <span className="detail-play-ep">S{resume.season} E{resume.ep.episodeNum}</span>
               </button>
             )}
             <button
               className={`detail-fav ${isFav ? 'on' : ''}`}
               onClick={onToggleFav}
               title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
-            >★</button>
+              aria-label={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
+            ><Icon name="star" filled={isFav} /></button>
           </div>
           {(data?.info?.plot || series.plot) && (
             <p className="detail-plot">{data?.info?.plot || series.plot}</p>
@@ -127,7 +129,7 @@ export default function SeriesDetail({ series, account, activeEpisodeId, onPlayE
                   )}
                 </div>
                 {isWatched && <span className="episode-watched" title="Gesehen">✓</span>}
-                <span className="episode-play">▶</span>
+                <span className="episode-play"><Icon name="play" size={14} filled /></span>
               </li>
             );
           })}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Icon from './Icon.jsx';
 
 export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onToggleFav }) {
   const [detail, setDetail] = useState(null);
@@ -28,22 +29,23 @@ export default function MovieDetail({ movie, account, onPlay, onBack, isFav, onT
 
   return (
     <div className="detail">
-      <button className="detail-back" onClick={onBack}>← Zurück</button>
+      <button className="detail-back" onClick={onBack}><Icon name="back" size={16} />Zurück</button>
       <div className="detail-head">
         {poster
           ? <img className="detail-poster" src={poster} alt="" onError={(e) => { e.target.style.display = 'none'; }} />
           : <div className="detail-poster detail-poster-ph" />}
         <div className="detail-info">
           <h1 className="detail-title">{movie.name}</h1>
-          {meta.length > 0 && <div className="detail-meta">{meta.join(' · ')}</div>}
-          {showRating && <div className="detail-rating">★ {rating}</div>}
+          {meta.length > 0 && <div className="detail-meta">{meta.map((m) => <span key={m}>{m}</span>)}</div>}
+          {showRating && <div className="detail-rating"><Icon name="star" size={14} filled />{rating}</div>}
           <div className="detail-actions">
-            <button className="detail-play" onClick={handlePlay}>▶ Abspielen</button>
+            <button className="detail-play" onClick={handlePlay}><Icon name="play" size={16} filled />Abspielen</button>
             <button
               className={`detail-fav ${isFav ? 'on' : ''}`}
               onClick={onToggleFav}
               title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
-            >★</button>
+              aria-label={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
+            ><Icon name="star" filled={isFav} /></button>
           </div>
           {loading && <span className="detail-loading">lädt Infos…</span>}
           {detail?.plot && <p className="detail-plot">{detail.plot}</p>}

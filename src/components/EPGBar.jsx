@@ -34,7 +34,7 @@ export default function EPGBar({ channel, epg }) {
     <div className="nownext">
       {current && (
         <div className="nn-now">
-          <div className="nn-label">JETZT · {fmtTime(current.startDate)}</div>
+          <div className="nn-label">Jetzt <span className="nn-label-time">{fmtTime(current.startDate)}</span></div>
           <div className="nn-title">{current.title}</div>
           <div className="nn-progress">
             <div className="nn-fill" style={{ width: `${progressPercent(current)}%` }} />

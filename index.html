@@ -4,9 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nightwave</title>
+    <meta name="description" content="Nightwave, ein IPTV-Player für Xtream-Codes-Zugänge mit Live-TV, Filmen, Serien und TV-Guide." />
     <style>
+      /* Hallmark · shape: app screen · theme: Ultraviolet · redesign: restyle · pre-paint only; the stamp and the system live in src/App.css */
+      /* Pre-paint ground so the window never flashes white before App.css loads. */
+      :root { --color-paper: oklch(14% 0.02 290); }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #0d0d0e; color: #ececef; font-family: 'Space Grotesk', system-ui, sans-serif; overflow: hidden; }
+      html, body { overflow: clip; }
+      body { background: var(--color-paper); }
     </style>
   </head>
   <body>

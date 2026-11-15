@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import BrandMark from './BrandMark.jsx';
+import Icon from './Icon.jsx';
 
 const MODES = [
   { key: 'live',   label: 'Live' },
@@ -80,15 +81,16 @@ export default function Toolbar({
         )}
       </nav>
 
-      <button className="tb-pill tb-icon-pill" onClick={onOpenSettings} title="Einstellungen">⚙</button>
+      <button className="tb-pill tb-icon-pill" onClick={onOpenSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
 
       <div className="tb-source" ref={sourceRef}>
         <button
           className={`tb-pill tb-icon-pill ${menuOpen ? 'active' : ''}`}
           onClick={() => { setMenuOpen((v) => !v); setUrlBox(null); }}
           title="Playlist / EPG laden / neu laden"
+          aria-label="Playlist / EPG laden / neu laden"
         >
-          {loading ? <span className="tb-spinner" /> : '＋'}
+          {loading ? <span className="tb-spinner" /> : <Icon name="plus" />}
         </button>
 
         {menuOpen && (

@@ -1,4 +1,5 @@
 import { FAVORITES, CONTINUE } from '../country.mjs';
+import Icon from './Icon.jsx';
 
 // Ebene der Seitenleiste vor der Liste: Land (kind 'country') oder Kategorie
 // (kind 'category') wählen. Bewusst ohne Virtualisierung — mehr als ~60 Länder
@@ -16,7 +17,7 @@ export default function CountryList({ countries, favoriteCount, continueCount, o
           onClick={() => onSelect(CONTINUE)}
           onKeyDown={(e) => { if (e.key === 'Enter') onSelect(CONTINUE); }}
         >
-          <div className="channel-logo channel-logo-ph">▶</div>
+          <div className="channel-logo channel-logo-ph"><Icon name="play" size={14} /></div>
           <div className="channel-text">
             <span className="channel-name">Weiter</span>
             <span className="channel-sub">angefangen</span>
@@ -33,7 +34,7 @@ export default function CountryList({ countries, favoriteCount, continueCount, o
           onClick={() => onSelect(FAVORITES)}
           onKeyDown={(e) => { if (e.key === 'Enter') onSelect(FAVORITES); }}
         >
-          <div className="channel-logo channel-logo-ph">★</div>
+          <div className="channel-logo channel-logo-ph"><Icon name="star" size={15} /></div>
           <div className="channel-text">
             <span className="channel-name">Favoriten</span>
             {kind === 'country' && <span className="channel-sub">länderübergreifend</span>}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Icon from './Icon.jsx';
 
 const MODES = [
   { key: 'live', label: 'Live' },
@@ -33,7 +34,7 @@ export default function Settings({ settings, onSave, onClearHistory, onClose }) 
       >
         <div className="settings-head">
           <span className="settings-title">Einstellungen</span>
-          <button className="guide-close" onClick={onClose}>✕</button>
+          <button className="guide-close" onClick={onClose} aria-label="Schließen"><Icon name="close" size={16} /></button>
         </div>
 
         <div className="settings-field">
