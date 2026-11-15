@@ -350,7 +350,9 @@ body {
   padding: 16px 22px;
   box-shadow: 0 26px 66px rgba(0,0,0,0.5);
   z-index: 3;
+  transition: opacity 0.15s;
 }
+.player-bar.bar-hidden { opacity: 0; pointer-events: none; }
 .player-bar-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-ctrl { display: flex; align-items: center; gap: 14px; padding-left: 16px; border-left: 1px solid var(--border); }
 .ctrl-btn { border: none; background: none; font-size: 19px; color: rgba(255,255,255,0.85); cursor: pointer; }
