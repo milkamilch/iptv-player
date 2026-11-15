@@ -623,6 +623,18 @@ async function run() {
     check(`Guide öffnet in unter ${GUIDE_BUDGET_MS} ms`, guideMs < GUIDE_BUDGET_MS,
       `${guideMs} ms bei ${TOTAL_CHANNELS} Kanälen`);
 
+    // #21: Titel und Zeit passen in den Block; Sender mit kaputtem Logo (jeder fünfte) rücken nicht nach links.
+    await wait(300); // onError der kaputten Logos abwarten
+    const guideLayout = await json(`(() => {
+      // Gestauchte Flex-Kinder schneiden ihre Glyphen über das eigene overflow: hidden ab.
+      const clipped = [...document.querySelectorAll('.epg-grid-prog-title, .epg-grid-prog-time')].slice(0, 80)
+        .filter((e) => e.scrollHeight > e.clientHeight).length;
+      const lefts = [...new Set([...document.querySelectorAll('.epg-grid-chname')].map((n) => Math.round(n.getBoundingClientRect().left)))];
+      return { clipped, lefts };
+    })()`);
+    check('Guide-Blöcke schneiden Titel und Zeit nicht ab', guideLayout.clipped === 0, JSON.stringify(guideLayout));
+    check('Sendernamen im Guide stehen bündig, auch ohne Logo', guideLayout.lefts.length === 1, JSON.stringify(guideLayout));
+
     // Beim Scrollen darf die Track-Breite nicht springen: sie kommt aus dem EPG,
     // nicht aus den gerade sichtbaren Zeilen.
     await ev(`(() => { const s = document.querySelector('.epg-grid-scroll'); s.scrollTop = s.scrollHeight; })()`);

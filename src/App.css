@@ -567,7 +567,7 @@ body {
 .epg-grid-prog {
   position: absolute; top: 6px; bottom: 6px;
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  padding: 7px 11px; overflow: hidden; text-align: left;
+  padding: 4px 11px; overflow: hidden; text-align: left;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
