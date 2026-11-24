@@ -32,7 +32,8 @@ a full-screen video feed with floating frosted-glass panels.
 - **Settings** — start mode, buffer size, custom EPG URL, clear history
 - **Auto-updates** — new versions are pulled automatically from GitHub Releases
 - **Multiple accounts** — up to 5 saved Xtream accounts (passwords encrypted
-  via the OS keyring), auto-login
+  via the OS keyring), auto-login; several server URLs per account with
+  automatic fallback
 - **M3U & XMLTV import** — optionally load playlist/EPG from a file or URL
 - HLS streaming (`.m3u8`, with reconnect) plus direct VOD containers (`mp4`/`mkv`)
 
@@ -105,7 +106,7 @@ Produces in `out/make/`, depending on the platform:
 
 After launch, enter your Xtream Codes credentials:
 
-- **Server URL** — e.g. `http://your-provider.example:8080`
+- **Server URLs** — one per line, e.g. `http://your-provider.example:8080`; if one stops working, the app switches to the next
 - **Username** and **password** from your IPTV provider
 
 The app then loads live channels (immediately) as well as movies and series (in
@@ -143,6 +144,8 @@ src/
 ├─ renderer.jsx         # React entry + fonts
 ├─ App.jsx              # state, navigation, layout
 ├─ xtream.js            # stream URL helpers (movie/episode)
+├─ servers.mjs          # server URL list and fallback logic
+├─ fetch-text.mjs       # HTTP text fetch (timeout, status check)
 ├─ epg.js               # EPG matching & XMLTV dates
 ├─ App.css              # "glass" design system
 └─ components/

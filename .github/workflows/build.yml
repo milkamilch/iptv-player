@@ -140,6 +140,18 @@ jobs:
       - name: UI smoke test (Login-Bildschirm)
         run: SCENARIO=login xvfb-run -a npm run test:ui
 
+      - name: UI smoke test (URL-Wechsel beim Login)
+        run: SCENARIO=failover-login xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (URL-Wechsel beim Start)
+        run: SCENARIO=failover-start xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (Abmelden während des URL-Wechsels)
+        run: SCENARIO=failover-logout xvfb-run -a npm run test:ui
+
+      - name: UI smoke test (URL-Wechsel nur für Filme)
+        run: SCENARIO=failover-vod xvfb-run -a npm run test:ui
+
       - name: UI smoke test (gemerktes Land beim Start)
         run: SCENARIO=live-restore xvfb-run -a npm run test:ui
 

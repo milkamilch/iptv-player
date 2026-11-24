@@ -1,7 +1,7 @@
 // Fährt den gebauten Renderer in Electron hoch und prüft ihn über das
 // DevTools-Protokoll. Voraussetzung: `npx vite build --config
 // vite.renderer.config.mjs --outDir <dir> --base ./` wurde ausgeführt.
-//   SCENARIO=login|live|live-restore npm run test:ui
+//   SCENARIO=login|live|live-restore|failover-login|failover-start|failover-logout|failover-vod npm run test:ui
 // Weitere Schalter: TEST_CHANNELS, TEST_PREFIXED, TEST_EPG_KEYS — siehe
 // test/README.md.
 import { spawn } from 'node:child_process';
@@ -76,6 +76,28 @@ const STORES = {
     activeAccount: { baseUrl: 'http://a.example:8080', username: 'anna', password: 'p1' },
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
     lastChannel: { id: '7', name: 'Kanal 7' },
+  },
+  // Login-Formular, wird im Szenario selbst ausgefüllt (tote URL: TEST_DEAD_HOSTS,
+  // auth 0: TEST_AUTH0_HOSTS, Nicht-JSON: TEST_NOJSON_HOSTS).
+  'failover-login': {},
+  // Start mit toter erster URL: die zweite muss übernehmen und gemerkt werden.
+  'failover-start': {
+    activeAccount: { baseUrl: 'http://dead.example:8080', baseUrls: ['http://dead.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
+    savedAccounts: [
+      { baseUrl: 'http://dead.example:8080', baseUrls: ['http://dead.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
+      { baseUrl: 'http://c.example:8080', username: 'carl', password: 'p2' },
+    ],
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+  },
+  // Start mit toter erster URL, deren Fehler 3 s dauert (TEST_DEAD_DELAY): Abmelden dazwischen.
+  'failover-logout': {
+    activeAccount: { baseUrl: 'http://dead.example:8080', baseUrls: ['http://dead.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+  },
+  // Kanäle auf a ok, Filme auf a tot (TEST_DEAD_VOD_HOSTS): nur die Filme wechseln auf b.
+  'failover-vod': {
+    activeAccount: { baseUrl: 'http://a.example:8080', baseUrls: ['http://a.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
   },
   // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
   // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
@@ -202,6 +224,11 @@ async function run() {
         ...process.env,
         APP_URL: `http://127.0.0.1:${HTTP_PORT}/index.html`,
         TEST_STORE: JSON.stringify(STORES[SCENARIO]),
+        TEST_DEAD_HOSTS: SCENARIO.startsWith('failover') && SCENARIO !== 'failover-vod' ? 'http://dead.example:8080' : '',
+        TEST_DEAD_DELAY: SCENARIO === 'failover-logout' ? '3000' : '0',
+        TEST_DEAD_VOD_HOSTS: SCENARIO === 'failover-vod' ? 'http://a.example:8080' : '',
+        TEST_AUTH0_HOSTS: SCENARIO === 'failover-login' ? 'http://auth0.example:8080' : '',
+        TEST_NOJSON_HOSTS: SCENARIO === 'failover-login' ? 'http://nojson.example:8080' : '',
         TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
         TEST_RESTORE_DELAY: ['live-restore-switch', 'live-restore-manual'].includes(SCENARIO) ? '6000' : '0',
       },
@@ -235,6 +262,109 @@ async function run() {
       svg: !!document.querySelector('.login-logo svg'),
     })`);
     check('Login zeigt Nightwave mit Logo', logo.text === 'Nightwave' && logo.svg, JSON.stringify(logo));
+  }
+
+  if (SCENARIO === 'failover-login') {
+    console.log('\nSzenario: URL-Wechsel beim Login');
+    // Wert über den nativen Setter setzen, damit React das input-Event sieht.
+    const fill = (sel, proto, value) => ev(`(() => {
+      const el = document.querySelector(${JSON.stringify(sel)});
+      Object.getOwnPropertyDescriptor(window.${proto}.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const submit = async (urls) => {
+      await fill('.login-urls', 'HTMLTextAreaElement', urls);
+      await fill('input[autocomplete=username]', 'HTMLInputElement', 'anna');
+      await fill('input[autocomplete=current-password]', 'HTMLInputElement', 'p1');
+      await ev(`document.querySelector('.login-submit').click()`);
+    };
+    const calls = () => ev(`window.__fetchXtreamCalls()`);
+    const errText = () => waitUntil(() => ev(`document.querySelector('.login-error')?.textContent || null`), (v) => !!v);
+    const chipOf = (host) => waitUntil(() => ev(`document.querySelector('.account-chip')?.textContent || ''`), (v) => v.startsWith(host));
+    // Abmelden und im Formular „Neu einloggen“ wählen.
+    const logoutToForm = async () => {
+      await ev(`document.querySelector('.account-chip').click()`);
+      await waitUntil(() => ev(`!!document.querySelector('.login-tab')`), (v) => v);
+      await ev(`[...document.querySelectorAll('.login-tab')].find(b => b.textContent === 'Neu einloggen').click()`);
+      await waitUntil(() => ev(`!!document.querySelector('.login-urls')`), (v) => v);
+    };
+    await submit('auth0.example:8080\nhttp://b.example:8080');
+    const before0 = await calls();
+    const err0 = await errText();
+    check('auth 0 meldet „Ungültige Zugangsdaten.“ ohne Wechsel',
+      err0 === 'Ungültige Zugangsdaten.' && before0 === 1 && (await calls()) === 1,
+      `${err0}, fetchXtream-Aufrufe: ${before0}`);
+    await submit('dead.example:8080');
+    const err = await waitUntil(() => ev(`document.querySelector('.login-error')?.textContent || null`), (v) => !!v && v.includes('erreichbar'));
+    check('nur tote URL meldet „Server nicht erreichbar“',
+      !!err && err.includes('Server nicht erreichbar') && await ev(`!!document.querySelector('.login-form')`), String(err));
+    await submit('dead.example:8080\n\nhttp://b.example:8080/');
+    const chip = await waitUntil(() => ev(`document.querySelector('.account-chip')?.textContent || ''`), (v) => v.startsWith('anna@b.example'));
+    check('Login wechselt auf die funktionierende URL', chip.startsWith('anna@b.example'), chip);
+    const want = JSON.stringify(['http://dead.example:8080', 'http://b.example:8080']);
+    const st = JSON.parse(await ev(`(async () => JSON.stringify({
+      saved: (await window.iptv.storeGet('savedAccounts'))[0],
+      active: await window.iptv.storeGet('activeAccount'),
+    }))()`));
+    const ok = (a) => JSON.stringify(a?.baseUrls) === want && a.baseUrl === 'http://b.example:8080';
+    check('gespeichert wird die ganze Liste', ok(st.saved) && ok(st.active), JSON.stringify(st));
+    await logoutToForm();
+    await submit('nojson.example:8080\nhttp://b.example:8080');
+    const chipB = await chipOf('anna@b.example');
+    check('Nicht-JSON-URL vorne ist nur Rückfall, Login über die JSON-URL', chipB.startsWith('anna@b.example'), chipB);
+    await logoutToForm();
+    await submit('nojson.example:8080');
+    const chipN = await chipOf('anna@nojson.example');
+    check('nur Nicht-JSON-URL loggt wie bisher ein', chipN.startsWith('anna@nojson.example'), chipN);
+  }
+
+  if (SCENARIO === 'failover-start') {
+    console.log('\nSzenario: URL-Wechsel beim Start');
+    const chip = await waitUntil(() => ev(`document.querySelector('.account-chip')?.textContent || ''`), (v) => v.startsWith('anna@b.example'));
+    check('Start wechselt auf die funktionierende URL', chip.startsWith('anna@b.example'), chip);
+    const n = await waitUntil(
+      () => ev(`document.querySelectorAll('.country-item, .category-item').length`), (v) => v > 0);
+    const toast = await ev(`!!document.querySelector('.toast-error')`);
+    check('Kanäle sind nach dem Wechsel geladen', n > 0 && !toast, `${n} Einträge, Fehler-Toast: ${toast}`);
+    const act = JSON.parse(await ev(`window.iptv.storeGet('activeAccount').then(JSON.stringify)`));
+    check('gewechselte URL wird gemerkt',
+      act.baseUrl === 'http://b.example:8080' &&
+        JSON.stringify(act.baseUrls) === JSON.stringify(['http://dead.example:8080', 'http://b.example:8080']),
+      JSON.stringify(act));
+    const saved = JSON.parse(await ev(`window.iptv.storeGet('savedAccounts').then(JSON.stringify)`));
+    const want = JSON.stringify(['http://dead.example:8080', 'http://b.example:8080']);
+    check('gemerkte URL steht im passenden gespeicherten Zugang, der fremde bleibt',
+      saved[0].baseUrl === 'http://b.example:8080' && JSON.stringify(saved[0].baseUrls) === want &&
+        saved[1].baseUrl === 'http://c.example:8080' && saved[1].username === 'carl' && !saved[1].baseUrls,
+      JSON.stringify(saved));
+  }
+
+  if (SCENARIO === 'failover-logout') {
+    console.log('\nSzenario: Abmelden während des URL-Wechsels');
+    await waitUntil(() => ev(`!!document.querySelector('.account-chip')`), (v) => v);
+    await ev(`document.querySelector('.account-chip').click()`);
+    await wait(4500); // länger als TEST_DEAD_DELAY, der Wechsel läuft in der Zeit durch
+    const v = await json(`({
+      chip: !!document.querySelector('.account-chip'),
+      form: !!document.querySelector('.login-form'),
+    })`);
+    check('Abmelden bleibt nach dem Wechsel bestehen', v.form && !v.chip, JSON.stringify(v));
+    const act = await ev(`window.iptv.storeGet('activeAccount').then((a) => a ?? null)`);
+    check('abgemeldeter Zugang wird nicht wieder gemerkt', act === null, JSON.stringify(act));
+  }
+
+  if (SCENARIO === 'failover-vod') {
+    console.log('\nSzenario: Wechsel nur für Filme');
+    const chip = await waitUntil(() => ev(`document.querySelector('.account-chip')?.textContent || ''`), (v) => v.startsWith('anna@b.example'), 5000);
+    check('toter Film-Host wechselt die Sitzung auf b', chip.startsWith('anna@b.example'), chip);
+    await ev(`[...document.querySelectorAll('.tb-pill')].find(b => b.textContent === 'Filme').click()`);
+    // "Weiter" und "Alle" stehen auch ohne geladene Filme in der Liste, zählen also nicht.
+    const names = await waitUntil(
+      () => json(`[...document.querySelectorAll('.country-item .channel-name, .category-item .channel-name')].map(e => e.textContent)`),
+      (v) => v.some((n) => n !== 'Weiter' && n !== 'Alle'));
+    check('Filme sind über b geladen', names.some((n) => n !== 'Weiter' && n !== 'Alle'), JSON.stringify(names));
+    const act = JSON.parse(await ev(`window.iptv.storeGet('activeAccount').then(JSON.stringify)`));
+    check('gewechselte URL wird gemerkt', act.baseUrl === 'http://b.example:8080', JSON.stringify(act));
   }
 
   if (SCENARIO === 'live-restore') {
