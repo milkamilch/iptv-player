@@ -2,11 +2,18 @@
 // Bewusst frei von React und IPC, damit es per `node --test` direkt prüfbar ist.
 import { isAuthRejected } from './auth-rejected.mjs';
 
+// Schema und Host klein, Pfad bleibt; dient als Normalform und als Vergleichsschlüssel.
+function urlKey(u) {
+  return typeof u === 'string'
+    ? u.replace(/^(https?:\/\/)((?:[^/?#]*@)?)([^/?#]*)/i, (_, s, userinfo, host) => s.toLowerCase() + userinfo + host.toLowerCase())
+    : u;
+}
+
 function normalizeUrl(raw) {
   let u = raw.trim().replace(/\/+$/, '');
   if (!u) return '';
-  if (!u.startsWith('http://') && !u.startsWith('https://')) u = 'http://' + u;
-  return u;
+  if (!/^https?:\/\//i.test(u)) u = 'http://' + u;
+  return urlKey(u);
 }
 
 // Eine URL pro Zeile; leere Zeilen und Duplikate fallen weg, die erste gewinnt.
@@ -22,7 +29,8 @@ export function urlsOf(acc) {
 
 // Aktive URL zuerst, Rest in Listenreihenfolge.
 export function failoverOrder(urls, active) {
-  return urls.includes(active) ? [active, ...urls.filter((u) => u !== active)] : urls;
+  const k = urlKey(active);
+  return urls.some((u) => urlKey(u) === k) ? [active, ...urls.filter((u) => urlKey(u) !== k)] : urls;
 }
 
 // Liefert { baseUrl, value } der ersten URL, bei der attempt klappt.
@@ -43,8 +51,13 @@ export async function firstWorking(urls, attempt) {
 
 export function sameAccount(a, b) {
   if (a.username !== b.username) return false;
-  const bUrls = urlsOf(b);
-  return urlsOf(a).some((u) => bUrls.includes(u));
+  const bKeys = urlsOf(b).map(urlKey);
+  return urlsOf(a).some((u) => bKeys.includes(urlKey(u)));
+}
+
+// Login-Prüfung mit denselben getrimmten Werten, die gespeichert werden.
+export function loginApiUrl(baseUrl, username, password) {
+  return `${baseUrl}/player_api.php?username=${encodeURIComponent(username.trim())}&password=${encodeURIComponent(password.trim())}`;
 }
 
 // Login über die Liste. fetchApi(url) liefert die player_api-Antwort oder wirft.

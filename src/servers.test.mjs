@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseUrlList, urlsOf, failoverOrder, firstWorking, sameAccount, verifyLogin } from './servers.mjs';
+import { parseUrlList, urlsOf, failoverOrder, firstWorking, sameAccount, verifyLogin, loginApiUrl } from './servers.mjs';
 
 test('normalisiert jede Zeile und ergänzt http://', () => {
   assert.deepEqual(parseUrlList('dead.example:8080\nhttps://b.example/'), ['http://dead.example:8080', 'https://b.example']);
@@ -135,4 +135,56 @@ test('Login: nur tote URLs werfen den letzten Fehler', async () => {
     verifyLogin(['a', 'b'], async (u) => { throw new Error('HTTP ' + u); }),
     { message: 'HTTP b' },
   );
+});
+
+test('erkennt das Schema unabhängig von Groß-/Kleinschreibung', () => {
+  assert.deepEqual(parseUrlList('HTTP://a.example:8080/\nHttps://b.example'), ['http://a.example:8080', 'https://b.example']);
+});
+
+test('schreibt den Host klein, der Pfad bleibt', () => {
+  assert.deepEqual(parseUrlList('HTTP://Host.Example:8080/Xtream/\nHost2.Example/Path'), ['http://host.example:8080/Xtream', 'http://host2.example/Path']);
+});
+
+test('Zugangsdaten in der URL bleiben unverändert', () => {
+  assert.deepEqual(parseUrlList('HTTP://User:Pw@Host.example'), ['http://User:Pw@host.example']);
+});
+
+test('@ im Passwort: nur der Host nach dem letzten @ wird klein', () => {
+  assert.deepEqual(parseUrlList('HTTP://us:P@SS@Host:8080/A@B'), ['http://us:P@SS@host:8080/A@B']);
+});
+
+test('Schreibweisen desselben Hosts sind Duplikate, die erste gewinnt', () => {
+  assert.deepEqual(parseUrlList('http://A.example:8080\nHTTP://a.EXAMPLE:8080/\na.example:8080'), ['http://a.example:8080']);
+});
+
+test('anderer Pfad oder anderes Schema ist kein Duplikat', () => {
+  assert.equal(parseUrlList('a.example/Tv\na.example/tv\nhttps://a.example/tv').length, 3);
+});
+
+test('aktive URL in anderer Host-Schreibweise steht vorn, ohne Doppelten', () => {
+  assert.deepEqual(failoverOrder(['http://b.example', 'http://Host.example:8080'], 'http://host.example:8080'), ['http://host.example:8080', 'http://b.example']);
+});
+
+test('aktive URL mit anderer Pfad-Schreibweise lässt die Reihenfolge stehen', () => {
+  const urls = ['http://a.example/Tv', 'http://b.example'];
+  assert.deepEqual(failoverOrder(urls, 'http://a.example/tv'), urls);
+});
+
+test('sameAccount: alter Eintrag mit gemischter Host-Schreibweise ist derselbe Zugang', () => {
+  const neu = { baseUrl: 'http://b.example', baseUrls: ['http://b.example', 'http://host.example:8080'], username: 'u' };
+  assert.equal(sameAccount({ baseUrl: 'http://Host.example:8080', username: 'u' }, neu), true);
+  assert.equal(sameAccount({ baseUrl: 'http://host.example:8080/Tv', username: 'u' }, { baseUrl: 'http://host.example:8080/tv', username: 'u' }), false);
+});
+
+test('Login-Prüfung nutzt getrimmte Zugangsdaten', () => {
+  assert.equal(loginApiUrl('http://a.example:8080', ' anna ', ' p1 '), 'http://a.example:8080/player_api.php?username=anna&password=p1');
+});
+
+test('Login-Prüfung kodiert Sonderzeichen, Leerzeichen innen bleiben', () => {
+  assert.equal(loginApiUrl('http://a', 'an na', 'p&1 x'), 'http://a/player_api.php?username=an%20na&password=p%261%20x');
+});
+
+test('sameAccount und failoverOrder werfen nicht bei Eintrag ohne URL', () => {
+  assert.equal(sameAccount({ username: 'u' }, { baseUrl: 'a', username: 'u' }), false);
+  assert.deepEqual(failoverOrder(['a'], undefined), ['a']);
 });

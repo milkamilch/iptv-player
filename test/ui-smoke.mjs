@@ -215,10 +215,10 @@ const fill = (sel, proto, value) => ev(`(() => {
   Object.getOwnPropertyDescriptor(window.${proto}.prototype, 'value').set.call(el, ${JSON.stringify(value)});
   el.dispatchEvent(new Event('input', { bubbles: true }));
 })()`);
-const submit = async (urls) => {
+const submit = async (urls, user = 'anna', pass = 'p1') => {
   await fill('.login-urls', 'HTMLTextAreaElement', urls);
-  await fill('input[autocomplete=username]', 'HTMLInputElement', 'anna');
-  await fill('input[autocomplete=current-password]', 'HTMLInputElement', 'p1');
+  await fill('input[autocomplete=username]', 'HTMLInputElement', user);
+  await fill('input[autocomplete=current-password]', 'HTMLInputElement', pass);
   await ev(`document.querySelector('.login-submit').click()`);
 };
 
@@ -338,6 +338,16 @@ async function run() {
     await submit('nojson.example:8080');
     const chipN = await chipOf('anna@nojson.example');
     check('nur Nicht-JSON-URL loggt wie bisher ein', chipN.startsWith('anna@nojson.example'), chipN);
+    await logoutToForm();
+    await submit('HTTP://B.Example:8080/', ' anna ', ' p1 ');
+    await chipOf('anna@b.example');
+    const sent = await ev(`window.__lastFetchXtreamUrl()`);
+    check('Login prüft getrimmte Zugangsdaten auf der normalisierten URL',
+      sent === 'http://b.example:8080/player_api.php?username=anna&password=p1', String(sent));
+    const acc = await ev(`(async () => JSON.stringify((await window.iptv.storeGet('savedAccounts'))[0]))()`).then(JSON.parse);
+    check('gespeichert wird die klein geschriebene URL mit getrimmten Zugangsdaten',
+      acc.baseUrl === 'http://b.example:8080' && JSON.stringify(acc.baseUrls) === JSON.stringify(['http://b.example:8080'])
+        && acc.username === 'anna' && acc.password === 'p1', JSON.stringify(acc));
   }
 
   if (SCENARIO === 'http-status') {
