@@ -4,6 +4,7 @@ import EPGBar from './EPGBar.jsx';
 import { getHistory, upsertHistory, removeHistory, markWatched, playableKey, HLS_BUFFER } from '../progress.js';
 import { createAutoHide, PLAYER_BAR_IDLE_MS } from '../autohide.mjs';
 import Icon from './Icon.jsx';
+import { hlsErrorAction } from '../http-status.mjs';
 
 // Build the "continue watching" card + rebuild info from the active playable.
 function cardFor(ch) {
@@ -157,13 +158,14 @@ export default function VideoPlayer({ channel, epg, showEpg, hlsBuffer }) {
         hls.on(Hls.Events.MANIFEST_PARSED, onReady);
         hls.on(Hls.Events.ERROR, (_e, data) => {
           if (!data.fatal) return;
+          const action = hlsErrorAction({ type: data.type, details: data.details, code: data.response?.code }, recoveries);
           // Try to recover transient network/media errors before giving up.
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && recoveries < 4) {
+          if (action.recover) {
             recoveries++; hls.startLoad();
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && recoveries < 4) {
             recoveries++; hls.recoverMediaError();
           } else {
-            setLoading(false); setError(`Stream-Fehler: ${data.type}`);
+            setLoading(false); setError(action.message);
           }
         });
       } else {

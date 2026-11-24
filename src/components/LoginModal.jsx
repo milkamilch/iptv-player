@@ -2,6 +2,7 @@ import { useState } from 'react';
 import BrandMark from './BrandMark.jsx';
 import Icon from './Icon.jsx';
 import { parseUrlList, verifyLogin } from '../servers.mjs';
+import { httpStatusOf, statusMessage } from '../http-status.mjs';
 
 export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, onDeleteAccount }) {
   const [url, setUrl]       = useState('');
@@ -35,7 +36,7 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
     } catch (err) {
       // Anything but wrong credentials is a genuine connection problem. Logging
       // in regardless would turn a typo'd URL into an empty app instead of an error.
-      setError(err?.stop ? 'Ungültige Zugangsdaten.' : 'Server nicht erreichbar — bitte URL prüfen.');
+      setError(err?.stop ? 'Ungültige Zugangsdaten.' : statusMessage(httpStatusOf(err)) ?? 'Server nicht erreichbar — bitte URL prüfen.');
     } finally {
       setLoading(false);
     }

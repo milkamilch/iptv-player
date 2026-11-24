@@ -152,6 +152,9 @@ jobs:
       - name: UI smoke test (URL-Wechsel nur für Filme)
         run: SCENARIO=failover-vod xvfb-run -a npm run test:ui
 
+      - name: UI smoke test (HTTP-Status des Providers)
+        run: SCENARIO=http-status xvfb-run -a npm run test:ui
+
       - name: UI smoke test (gemerktes Land beim Start)
         run: SCENARIO=live-restore xvfb-run -a npm run test:ui
 

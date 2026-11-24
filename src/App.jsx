@@ -12,6 +12,7 @@ import { movieUrl, episodeUrl } from './xtream.js';
 import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTINGS } from './progress.js';
 import { buildCountryIndex, categoryCounts, FAVORITES, CONTINUE } from './country.mjs';
 import { urlsOf, failoverOrder, firstWorking, sameAccount } from './servers.mjs';
+import { httpStatusOf, statusMessage } from './http-status.mjs';
 import './App.css';
 
 export default function App() {
@@ -341,7 +342,7 @@ export default function App() {
       setActiveGroup(null);
       showToast(`${chs.length} Kanäle geladen`, 'success');
     } catch (e) {
-      if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + e.message, 'error');
+      if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + (statusMessage(httpStatusOf(e)) ?? e.message), 'error');
     }
 
     setLoading(false);
