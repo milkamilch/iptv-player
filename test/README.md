@@ -13,7 +13,7 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 | --- | --- | --- |
 | `live` (Standard) | angemeldeter Zugang | Länder- und Kategorienebene (Live, Filme, Serien), Suche, Guide, Virtualisierung, Ausblenden der Player-Leiste |
 | `login` | zwei gespeicherte Zugänge, nicht angemeldet | Login-Bildschirm mit Zugangsliste |
-| `failover-login` | leer, Formular wird im Test ausgefüllt; `dead.example:8080` ist tot (`TEST_DEAD_HOSTS`) | dass auth 0 ohne Wechsel „Ungültige Zugangsdaten.“ meldet, nur tote URLs den Fehler zeigen, bei toter erster URL die zweite übernimmt, die ganze Liste samt aktiver URL gespeichert wird und eine Nicht-JSON-URL nur als Rückfall gilt |
+| `failover-login` | leer, Formular wird im Test ausgefüllt; `dead.example:8080` ist tot (`TEST_DEAD_HOSTS`) | dass auth 0 ohne Wechsel „Ungültige Zugangsdaten.“ meldet, nur tote URLs den Fehler zeigen, bei toter erster URL die zweite übernimmt, die ganze Liste samt aktiver URL gespeichert wird, eine Nicht-JSON-URL nur als Rückfall gilt und dass Schema/Host klein gespeichert und Zugangsdaten getrimmt geprüft werden |
 | `failover-start` | angemeldeter Zugang (auch in `savedAccounts`, plus ein fremder Zugang) mit toter erster und funktionierender zweiter URL | dass der Start auf die zweite wechselt, Kanäle lädt und die URL in `activeAccount` und im passenden gespeicherten Zugang merkt, der fremde unberührt bleibt |
 | `failover-logout` | wie `failover-start`, der Fehler der toten URL kommt erst nach 3 s (`TEST_DEAD_DELAY`) | dass Abmelden während des Wechsels bestehen bleibt |
 | `failover-vod` | angemeldeter Zugang mit URLs a, b; Filme auf a tot (`TEST_DEAD_VOD_HOSTS`) | dass die Filme auf b wechseln, die Sitzung b wird und gemerkt ist |

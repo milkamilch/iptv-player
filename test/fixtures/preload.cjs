@@ -21,7 +21,8 @@ const dead = () => new Promise((_, rej) => setTimeout(() => rej(new Error('net::
 // Nur Filme (Liste und Info) auf diesen Basis-URLs tot.
 const DEAD_VOD = list('TEST_DEAD_VOD_HOSTS');
 const isDeadVod = (base) => isDead(base) || DEAD_VOD.includes(base);
-// fetchXtream: auth 0 bzw. Antwort ohne JSON; die Aufrufe zählt calls (window.__fetchXtreamCalls()).
+// fetchXtream: auth 0 bzw. Antwort ohne JSON; die Aufrufe zählt calls (window.__fetchXtreamCalls()),
+// die zuletzt angefragte URL liefert window.__lastFetchXtreamUrl().
 const AUTH0 = list('TEST_AUTH0_HOSTS');
 const NOJSON = list('TEST_NOJSON_HOSTS');
 // Basis-URLs, deren Server mit HTTP 513 ablehnt: fetchXtream und loadXtreamChannels scheitern
@@ -36,6 +37,7 @@ const rejectedAuth = (name) => Promise.reject(new Error(`Error invoking remote m
 const STREAM_BASE = process.env.TEST_STREAM_BASE || 'http://127.0.0.1:1';
 const onHost = (hosts, url) => hosts.some((b) => url.startsWith(b + '/'));
 let fetchXtreamCalls = 0;
+let lastFetchXtreamUrl = null;
 
 const chans = [];
 for (let i = 1; i <= CHANNEL_COUNT; i++) {
@@ -125,6 +127,7 @@ contextBridge.exposeInMainWorld('iptv', {
   secureDecrypt: async (v) => v,
   fetchXtream: async (url) => {
     fetchXtreamCalls++;
+    lastFetchXtreamUrl = url;
     if (onHost(DEAD, url)) return dead();
     if (onHost(HTTP513, url)) return rejected513('fetch-xtream');
     if (onHost(NOJSON, url)) throw new Error('Ungültige JSON-Antwort');
@@ -142,3 +145,4 @@ contextBridge.exposeInMainWorld('iptv', {
   openExternal: async () => {},
 });
 contextBridge.exposeInMainWorld('__fetchXtreamCalls', () => fetchXtreamCalls);
+contextBridge.exposeInMainWorld('__lastFetchXtreamUrl', () => lastFetchXtreamUrl);

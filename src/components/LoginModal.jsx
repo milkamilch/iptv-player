@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import BrandMark from './BrandMark.jsx';
 import Icon from './Icon.jsx';
-import { parseUrlList, verifyLogin } from '../servers.mjs';
+import { parseUrlList, verifyLogin, loginApiUrl } from '../servers.mjs';
 import { httpStatusOf, statusMessage } from '../http-status.mjs';
 
 export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, onDeleteAccount }) {
@@ -30,7 +30,7 @@ export default function LoginModal({ onLogin, savedAccounts, onSelectAccount, on
       // Verify credentials via Xtream Codes API, URL für URL
       // 2xx ohne JSON: Login ohne API-Prüfung (nur als Rückfall)
       const { baseUrl, info } = await verifyLogin(baseUrls, (u) =>
-        window.iptv.fetchXtream(`${u}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`)
+        window.iptv.fetchXtream(loginApiUrl(u, user, pass))
       );
       onLogin({ baseUrl, baseUrls, username: user.trim(), password: pass.trim(), info });
     } catch (err) {
