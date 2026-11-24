@@ -1,6 +1,6 @@
 # Tests
 
-- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`, `src/autohide.mjs`, `src/servers.mjs` und `src/fetch-text.mjs`.
+- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`, `src/autohide.mjs`, `src/servers.mjs`, `src/fetch-text.mjs` und `src/http-status.mjs`.
 - `npm run test:ui` — baut den Renderer nach `.vite/renderer-test` und fährt ihn in
   Electron hoch, ferngesteuert über das DevTools-Protokoll.
 
@@ -17,6 +17,7 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 | `failover-start` | angemeldeter Zugang (auch in `savedAccounts`, plus ein fremder Zugang) mit toter erster und funktionierender zweiter URL | dass der Start auf die zweite wechselt, Kanäle lädt und die URL in `activeAccount` und im passenden gespeicherten Zugang merkt, der fremde unberührt bleibt |
 | `failover-logout` | wie `failover-start`, der Fehler der toten URL kommt erst nach 3 s (`TEST_DEAD_DELAY`) | dass Abmelden während des Wechsels bestehen bleibt |
 | `failover-vod` | angemeldeter Zugang mit URLs a, b; Filme auf a tot (`TEST_DEAD_VOD_HOSTS`) | dass die Filme auf b wechseln, die Sitzung b wird und gemerkt ist |
+| `http-status` | zwei gespeicherte Zugänge, nicht angemeldet; `s513.example:8080` antwortet mit HTTP 513 (`TEST_HTTP513_HOSTS`), die Stream-Pfade der Kanäle ebenso (`TEST_STREAM_BASE`) | dass Login, Listenladen und HLS-Wiedergabe „Server antwortet mit HTTP 513.“ nennen, ohne IPC-Text und ohne Spinner |
 | `live-restore` | angemeldeter Zugang **plus** `lastCountry: 'DE'` | dass der Start direkt in die Kategorienliste des gemerkten Landes trägt statt in die Länderliste |
 | `live-restore-channel` | wie oben, **plus** `lastChannel` = Kanal 7 (FR — widerspricht `lastCountry`) | dass der wiederhergestellte Kanal die Leiste in sein Land („Alle“) zieht und der Store nachgeführt wird |
 | `live-restore-switch` | angemeldeter Zugang plus `lastChannel` = Kanal 7, dessen Lesen 6 s dauert (`TEST_RESTORE_DELAY`) | dass ein Wechsel nach Filme während des Lesens den Restore abbricht und kein Live-Sender anläuft |
@@ -35,11 +36,13 @@ als erste Ebene bzw. „Alle“ für den Kanal, keine Länder-Breadcrumb) statt 
 | `TEST_CHANNELS` | `420` | Anzahl der Fixture-Kanäle. Ab `> 400` Kanälen im aktiven Land greift die Tiefen-Navigations-Prüfung (`Pfeiltasten über Position 300`); darunter meldet sie SKIP. Für Virtualisierung und Guide-Budget: `TEST_CHANNELS=20000`. |
 | `TEST_PREFIXED` | `1` | `0` erzeugt Kategorien **ohne** Länderpräfix (`Sport` statt `DE \| Sport`) und Film-/Serientitel ohne Präfix (`Street Fighter` statt `DE - Street Fighter`). Damit fällt die Länderebene weg (ein einziger Eimer ⇒ `countryIndex.enabled === false`) und die Sidebar beginnt mit der Kategorienliste. |
 | `TEST_EPG_KEYS` | `3000` | Anzahl der XMLTV-Kanalschlüssel im Fixture-EPG (je 8 Sendungen à 90 min, jeder siebte Kanal fehlt absichtlich). Die Kosten des Namens-Fallbacks in `matchProgrammes` sind Kanäle × Schlüssel — ein kleines EPG macht die Guide-Performance-Prüfung stumpf. |
-| `TEST_DEAD_HOSTS` | leer | Kommagetrennte Basis-URLs, an denen die Fake-Bridge wie bei HTTP 503 scheitert. Setzt `ui-smoke.mjs` für die `failover-*`-Szenarien selbst. |
+| `TEST_DEAD_HOSTS` | leer | Kommagetrennte Basis-URLs, an denen die Fake-Bridge ohne HTTP-Status scheitert (`net::ERR_CONNECTION_REFUSED`). Setzt `ui-smoke.mjs` für die `failover-*`-Szenarien selbst. |
 | `TEST_DEAD_DELAY` | `0` | Millisekunden, nach denen eine tote Basis-URL scheitert. Setzt `ui-smoke.mjs` für `failover-logout` selbst. |
 | `TEST_DEAD_VOD_HOSTS` | leer | Basis-URLs, an denen nur Filme (Liste und Info) scheitern. Setzt `ui-smoke.mjs` für `failover-vod` selbst. |
 | `TEST_AUTH0_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` `auth 0` liefert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
 | `TEST_NOJSON_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` mit „Ungültige JSON-Antwort“ scheitert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
+| `TEST_HTTP513_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` und `loadXtreamChannels` mit „HTTP 513“ (in Electrons IPC-Verpackung) scheitern. Setzt `ui-smoke.mjs` für `http-status` selbst. |
+| `TEST_STREAM_BASE` | leer | Wenn gesetzt, tragen die Kanal-URLs diese Basis (`<Basis>/live/u/p/<n>.m3u8`) statt `http://127.0.0.1:1`. Setzt `ui-smoke.mjs` für `http-status` selbst (lokaler Server, Pfad `http513/` antwortet mit 513). |
 | `RENDERER_DIST` | `.vite/renderer-test` | Verzeichnis des gebauten Renderers. |
 
 Sinnvolle Kombinationen (so laufen sie auch in CI):
@@ -54,6 +57,7 @@ SCENARIO=failover-login npm run test:ui
 SCENARIO=failover-start npm run test:ui
 SCENARIO=failover-logout npm run test:ui
 SCENARIO=failover-vod npm run test:ui
+SCENARIO=http-status npm run test:ui
 SCENARIO=live-restore npm run test:ui
 SCENARIO=live-restore-channel npm run test:ui
 SCENARIO=vod-delay npm run test:ui

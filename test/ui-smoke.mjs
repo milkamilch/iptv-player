@@ -1,7 +1,7 @@
 // Fährt den gebauten Renderer in Electron hoch und prüft ihn über das
 // DevTools-Protokoll. Voraussetzung: `npx vite build --config
 // vite.renderer.config.mjs --outDir <dir> --base ./` wurde ausgeführt.
-//   SCENARIO=login|live|live-restore|failover-login|failover-start|failover-logout|failover-vod npm run test:ui
+//   SCENARIO=login|live|live-restore|failover-login|failover-start|failover-logout|failover-vod|http-status npm run test:ui
 // Weitere Schalter: TEST_CHANNELS, TEST_PREFIXED, TEST_EPG_KEYS — siehe
 // test/README.md.
 import { spawn } from 'node:child_process';
@@ -99,6 +99,15 @@ const STORES = {
     activeAccount: { baseUrl: 'http://a.example:8080', baseUrls: ['http://a.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
   },
+  // Login-Bildschirm mit zwei gespeicherten Zugängen; s513 antwortet überall mit HTTP 513
+  // (TEST_HTTP513_HOSTS), die Kanäle von a zeigen auf einen Stream-Pfad, der 513 liefert (TEST_STREAM_BASE).
+  'http-status': {
+    savedAccounts: [
+      { baseUrl: 'http://s513.example:8080', username: 'anna', password: 'p1' },
+      { baseUrl: 'http://a.example:8080', username: 'ben', password: 'p2' },
+    ],
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+  },
   // Start in Filme mit verzögert ladender VOD-Liste (TEST_VOD_DELAY, siehe
   // spawn unten): in der Ladephase ist "Weiter" die erste Ebene.
   'vod-delay': {
@@ -192,6 +201,19 @@ async function debugPortAnswers() {
   }
 }
 
+// Formular ausfüllen: Wert über den nativen Setter setzen, damit React das input-Event sieht.
+const fill = (sel, proto, value) => ev(`(() => {
+  const el = document.querySelector(${JSON.stringify(sel)});
+  Object.getOwnPropertyDescriptor(window.${proto}.prototype, 'value').set.call(el, ${JSON.stringify(value)});
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+const submit = async (urls) => {
+  await fill('.login-urls', 'HTMLTextAreaElement', urls);
+  await fill('input[autocomplete=username]', 'HTMLInputElement', 'anna');
+  await fill('input[autocomplete=current-password]', 'HTMLInputElement', 'p1');
+  await ev(`document.querySelector('.login-submit').click()`);
+};
+
 async function run() {
   if (await debugPortAnswers()) {
     throw new Error(
@@ -202,6 +224,7 @@ async function run() {
 
   server = createServer(async (req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html';
+    if (rel.startsWith('http513/')) { res.writeHead(513).end(); return; }
     try {
       const body = await readFile(path.join(DIST, rel));
       res.writeHead(200, { 'Content-Type': MIME[path.extname(rel)] || 'application/octet-stream' });
@@ -229,6 +252,8 @@ async function run() {
         TEST_DEAD_VOD_HOSTS: SCENARIO === 'failover-vod' ? 'http://a.example:8080' : '',
         TEST_AUTH0_HOSTS: SCENARIO === 'failover-login' ? 'http://auth0.example:8080' : '',
         TEST_NOJSON_HOSTS: SCENARIO === 'failover-login' ? 'http://nojson.example:8080' : '',
+        TEST_HTTP513_HOSTS: SCENARIO === 'http-status' ? 'http://s513.example:8080' : '',
+        TEST_STREAM_BASE: SCENARIO === 'http-status' ? `http://127.0.0.1:${HTTP_PORT}/http513` : '',
         TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
         TEST_RESTORE_DELAY: ['live-restore-switch', 'live-restore-manual'].includes(SCENARIO) ? '6000' : '0',
       },
@@ -266,18 +291,6 @@ async function run() {
 
   if (SCENARIO === 'failover-login') {
     console.log('\nSzenario: URL-Wechsel beim Login');
-    // Wert über den nativen Setter setzen, damit React das input-Event sieht.
-    const fill = (sel, proto, value) => ev(`(() => {
-      const el = document.querySelector(${JSON.stringify(sel)});
-      Object.getOwnPropertyDescriptor(window.${proto}.prototype, 'value').set.call(el, ${JSON.stringify(value)});
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    })()`);
-    const submit = async (urls) => {
-      await fill('.login-urls', 'HTMLTextAreaElement', urls);
-      await fill('input[autocomplete=username]', 'HTMLInputElement', 'anna');
-      await fill('input[autocomplete=current-password]', 'HTMLInputElement', 'p1');
-      await ev(`document.querySelector('.login-submit').click()`);
-    };
     const calls = () => ev(`window.__fetchXtreamCalls()`);
     const errText = () => waitUntil(() => ev(`document.querySelector('.login-error')?.textContent || null`), (v) => !!v);
     const chipOf = (host) => waitUntil(() => ev(`document.querySelector('.account-chip')?.textContent || ''`), (v) => v.startsWith(host));
@@ -316,6 +329,40 @@ async function run() {
     await submit('nojson.example:8080');
     const chipN = await chipOf('anna@nojson.example');
     check('nur Nicht-JSON-URL loggt wie bisher ein', chipN.startsWith('anna@nojson.example'), chipN);
+  }
+
+  if (SCENARIO === 'http-status') {
+    console.log('\nSzenario: HTTP-Status des Providers');
+    const want = 'Server antwortet mit HTTP 513.';
+    const clickTab = (label) => ev(`[...document.querySelectorAll('.login-tab')].find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+    const clickRow = (host) => ev(`[...document.querySelectorAll('.saved-account-row')].find(r => r.textContent.includes(${JSON.stringify(host)})).click()`);
+    await waitUntil(() => ev(`!!document.querySelector('.login-tab')`), (v) => v);
+
+    await clickTab('Neu einloggen');
+    await waitUntil(() => ev(`!!document.querySelector('.login-urls')`), (v) => v);
+    await submit('s513.example:8080');
+    const loginErr = await waitUntil(() => ev(`document.querySelector('.login-error')?.textContent || null`), (v) => !!v);
+    check('Login nennt den HTTP-Status',
+      loginErr === want && await ev(`!!document.querySelector('.login-form')`), String(loginErr));
+
+    await clickTab('Gespeicherte');
+    await waitUntil(() => ev(`!!document.querySelector('.saved-account-row')`), (v) => v);
+    await clickRow('s513.example');
+    const toast = await waitUntil(() => ev(`document.querySelector('.toast-error')?.textContent || null`), (v) => !!v);
+    check('Listenladen nennt den HTTP-Status ohne IPC-Text',
+      toast === 'Kanäle konnten nicht geladen werden: ' + want && !toast.includes('remote method'), String(toast));
+
+    await ev(`document.querySelector('.account-chip')?.click()`);
+    await waitUntil(() => ev(`!!document.querySelector('.saved-account-row')`), (v) => v);
+    await clickRow('a.example');
+    await waitUntil(() => ev(`document.querySelectorAll('.country-item').length`), (v) => v > 0, 5000);
+    await ev(`[...document.querySelectorAll('.country-item')].find(e => e.textContent.includes('Deutschland')).click()`);
+    await wait(500);
+    await pick('Alle');
+    await ev(`document.querySelectorAll('.channel-item')[0].click()`);
+    const playErr = await waitUntil(() => ev(`document.querySelector('.video-error-msg')?.textContent || null`), (v) => !!v, 15000);
+    const spinner = await ev(`document.body.textContent.includes('Verbinde…')`);
+    check('Wiedergabe nennt den HTTP-Status', playErr === want && !spinner, `${playErr}, Spinner: ${spinner}`);
   }
 
   if (SCENARIO === 'failover-start') {
