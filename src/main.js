@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electro
 import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { updateElectronApp } from 'update-electron-app';
-import { fetchText as fetchTextWith } from './fetch-text.mjs';
+import { fetchText as fetchTextWith, allOrAbort, ABORTED } from './fetch-text.mjs';
 import { assertAuthorized } from './auth-rejected.mjs';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -122,9 +122,9 @@ const createWindow = () => {
 
 // ── HTTP helper ───────────────────────────────────────────────────────────────
 // Logik in fetch-text.mjs (Body als Bytes, strict für Xtream).
-async function fetchText(url, { strict = false } = {}) {
+async function fetchText(url, { strict = false, signal } = {}) {
   const { net } = await import('electron');
-  return fetchTextWith(url, { request: (u) => net.request(u), strict });
+  return fetchTextWith(url, { request: (u) => net.request(u), strict, signal });
 }
 
 // ── IPC Handlers ──────────────────────────────────────────────────────────────
@@ -174,8 +174,9 @@ ipcMain.handle('load-xmltv-url', async (_event, url) => {
 });
 
 // ── Xtream Codes API fetch (generic JSON) ────────────────────────────────────
-async function fetchJson(url) {
-  const text = await fetchText(url, { strict: true });
+async function fetchJson(url, signal) {
+  const text = await fetchText(url, { strict: true, signal });
+  if (signal?.aborted) throw new Error(ABORTED); // abgebrochen: nicht mehr parsen
   try { return JSON.parse(text); }
   catch { throw new Error('Ungültige JSON-Antwort'); }
 }
@@ -187,9 +188,9 @@ ipcMain.handle('load-xtream-channels', async (_event, baseUrl, username, passwor
   const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
 
   // Fetch categories and streams in parallel
-  const [categories, streams] = await Promise.all([
-    fetchJson(`${base}&action=get_live_categories`),
-    fetchJson(`${base}&action=get_live_streams`),
+  const [categories, streams] = await allOrAbort([
+    (signal) => fetchJson(`${base}&action=get_live_categories`, signal),
+    (signal) => fetchJson(`${base}&action=get_live_streams`, signal),
   ]);
   assertAuthorized(categories, streams);
 
@@ -220,9 +221,9 @@ ipcMain.handle('load-xtream-channels', async (_event, baseUrl, username, passwor
 // ── Xtream Codes: load all VOD (movies) via JSON API ─────────────────────────
 ipcMain.handle('load-xtream-vod', async (_event, baseUrl, username, password) => {
   const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-  const [categories, streams] = await Promise.all([
-    fetchJson(`${base}&action=get_vod_categories`),
-    fetchJson(`${base}&action=get_vod_streams`),
+  const [categories, streams] = await allOrAbort([
+    (signal) => fetchJson(`${base}&action=get_vod_categories`, signal),
+    (signal) => fetchJson(`${base}&action=get_vod_streams`, signal),
   ]);
   assertAuthorized(categories, streams);
   const catMap = {};
@@ -246,9 +247,9 @@ ipcMain.handle('load-xtream-vod', async (_event, baseUrl, username, password) =>
 // ── Xtream Codes: load all series via JSON API ───────────────────────────────
 ipcMain.handle('load-xtream-series', async (_event, baseUrl, username, password) => {
   const base = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-  const [categories, series] = await Promise.all([
-    fetchJson(`${base}&action=get_series_categories`),
-    fetchJson(`${base}&action=get_series`),
+  const [categories, series] = await allOrAbort([
+    (signal) => fetchJson(`${base}&action=get_series_categories`, signal),
+    (signal) => fetchJson(`${base}&action=get_series`, signal),
   ]);
   assertAuthorized(categories, series);
   const catMap = {};
