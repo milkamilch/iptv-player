@@ -28,6 +28,10 @@ const NOJSON = list('TEST_NOJSON_HOSTS');
 // mit der Meldung samt Electron-IPC-Verpackung (die Fixture umgeht IPC, der echte Fehler trägt sie).
 const HTTP513 = list('TEST_HTTP513_HOSTS');
 const rejected513 = (name) => Promise.reject(new Error(`Error invoking remote method '${name}': Error: HTTP 513`));
+// Basis-URLs, deren Server beim Listenladen auth 0 meldet: loadXtreamChannels/-Vod/-Series scheitern
+// mit der Meldung, die main.js nach assertAuthorized wirft, samt IPC-Verpackung (die Fixture umgeht IPC).
+const AUTH0_LIST = list('TEST_AUTH0_LIST_HOSTS');
+const rejectedAuth = (name) => Promise.reject(new Error(`Error invoking remote method '${name}': Error: Ungültige Zugangsdaten.`));
 // Wenn gesetzt, zeigen die Kanal-URLs auf diesen Server (dort antwortet ein Pfad mit 513).
 const STREAM_BASE = process.env.TEST_STREAM_BASE || 'http://127.0.0.1:1';
 const onHost = (hosts, url) => hosts.some((b) => url.startsWith(b + '/'));
@@ -126,9 +130,9 @@ contextBridge.exposeInMainWorld('iptv', {
     if (onHost(NOJSON, url)) throw new Error('Ungültige JSON-Antwort');
     return { user_info: { auth: onHost(AUTH0, url) ? 0 : 1 } };
   },
-  loadXtreamChannels: async (base) => (isDead(base) ? dead() : HTTP513.includes(base) ? rejected513('load-xtream-channels') : chans),
-  loadXtreamVod: (base) => (isDeadVod(base) ? dead() : delayed(movies)),
-  loadXtreamSeries: (base) => (isDead(base) ? dead() : delayed(series)),
+  loadXtreamChannels: async (base) => (isDead(base) ? dead() : HTTP513.includes(base) ? rejected513('load-xtream-channels') : AUTH0_LIST.includes(base) ? rejectedAuth('load-xtream-channels') : chans),
+  loadXtreamVod: (base) => (isDeadVod(base) ? dead() : AUTH0_LIST.includes(base) ? rejectedAuth('load-xtream-vod') : delayed(movies)),
+  loadXtreamSeries: (base) => (isDead(base) ? dead() : AUTH0_LIST.includes(base) ? rejectedAuth('load-xtream-series') : delayed(series)),
   loadXtreamVodInfo: async (base) => (isDeadVod(base) ? dead() : { plot: 'p', rating: '0', containerExt: 'mp4' }),
   loadXtreamSeriesInfo: async (base) => (isDead(base) ? dead() : { info: {}, seasons: [] }),
   loadXMLTVUrl: async () => epg,
