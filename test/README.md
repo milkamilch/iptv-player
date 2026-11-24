@@ -1,6 +1,6 @@
 # Tests
 
-- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`, `src/autohide.mjs`, `src/servers.mjs`, `src/fetch-text.mjs` und `src/http-status.mjs`.
+- `npm test` — Unit-Tests (`node --test`), prüft `src/country.mjs`, `src/autohide.mjs`, `src/servers.mjs`, `src/fetch-text.mjs`, `src/http-status.mjs` und `src/auth-rejected.mjs`.
 - `npm run test:ui` — baut den Renderer nach `.vite/renderer-test` und fährt ihn in
   Electron hoch, ferngesteuert über das DevTools-Protokoll.
 
@@ -18,6 +18,7 @@ Der UI-Test braucht ein Display. Unter Linux ohne Desktop:
 | `failover-logout` | wie `failover-start`, der Fehler der toten URL kommt erst nach 3 s (`TEST_DEAD_DELAY`) | dass Abmelden während des Wechsels bestehen bleibt |
 | `failover-vod` | angemeldeter Zugang mit URLs a, b; Filme auf a tot (`TEST_DEAD_VOD_HOSTS`) | dass die Filme auf b wechseln, die Sitzung b wird und gemerkt ist |
 | `http-status` | zwei gespeicherte Zugänge, nicht angemeldet; `s513.example:8080` antwortet mit HTTP 513 (`TEST_HTTP513_HOSTS`), die Stream-Pfade der Kanäle ebenso (`TEST_STREAM_BASE`) | dass Login, Listenladen und HLS-Wiedergabe „Server antwortet mit HTTP 513.“ nennen, ohne IPC-Text und ohne Spinner |
+| `auth0-list` | ein gespeicherter Zugang mit zwei URLs, nicht angemeldet; die erste (`revoked.example:8080`) meldet beim Listenladen auth 0 (`TEST_AUTH0_LIST_HOSTS`) | dass das Listenladen „Ungültige Zugangsdaten.“ ohne IPC-/JS-Fehlertext nennt und nicht auf die zweite URL wechselt |
 | `live-restore` | angemeldeter Zugang **plus** `lastCountry: 'DE'` | dass der Start direkt in die Kategorienliste des gemerkten Landes trägt statt in die Länderliste |
 | `live-restore-channel` | wie oben, **plus** `lastChannel` = Kanal 7 (FR — widerspricht `lastCountry`) | dass der wiederhergestellte Kanal die Leiste in sein Land („Alle“) zieht und der Store nachgeführt wird |
 | `live-restore-switch` | angemeldeter Zugang plus `lastChannel` = Kanal 7, dessen Lesen 6 s dauert (`TEST_RESTORE_DELAY`) | dass ein Wechsel nach Filme während des Lesens den Restore abbricht und kein Live-Sender anläuft |
@@ -41,6 +42,7 @@ als erste Ebene bzw. „Alle“ für den Kanal, keine Länder-Breadcrumb) statt 
 | `TEST_DEAD_VOD_HOSTS` | leer | Basis-URLs, an denen nur Filme (Liste und Info) scheitern. Setzt `ui-smoke.mjs` für `failover-vod` selbst. |
 | `TEST_AUTH0_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` `auth 0` liefert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
 | `TEST_NOJSON_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` mit „Ungültige JSON-Antwort“ scheitert. Setzt `ui-smoke.mjs` für `failover-login` selbst. |
+| `TEST_AUTH0_LIST_HOSTS` | leer | Basis-URLs, an denen `loadXtreamChannels`, `loadXtreamVod` und `loadXtreamSeries` mit „Ungültige Zugangsdaten.“ (in Electrons IPC-Verpackung) scheitern. Setzt `ui-smoke.mjs` für `auth0-list` selbst. |
 | `TEST_HTTP513_HOSTS` | leer | Basis-URLs, an denen `fetchXtream` und `loadXtreamChannels` mit „HTTP 513“ (in Electrons IPC-Verpackung) scheitern. Setzt `ui-smoke.mjs` für `http-status` selbst. |
 | `TEST_STREAM_BASE` | leer | Wenn gesetzt, tragen die Kanal-URLs diese Basis (`<Basis>/live/u/p/<n>.m3u8`) statt `http://127.0.0.1:1`. Setzt `ui-smoke.mjs` für `http-status` selbst (lokaler Server, Pfad `http513/` antwortet mit 513). |
 | `RENDERER_DIST` | `.vite/renderer-test` | Verzeichnis des gebauten Renderers. |
@@ -58,6 +60,7 @@ SCENARIO=failover-start npm run test:ui
 SCENARIO=failover-logout npm run test:ui
 SCENARIO=failover-vod npm run test:ui
 SCENARIO=http-status npm run test:ui
+SCENARIO=auth0-list npm run test:ui
 SCENARIO=live-restore npm run test:ui
 SCENARIO=live-restore-channel npm run test:ui
 SCENARIO=vod-delay npm run test:ui

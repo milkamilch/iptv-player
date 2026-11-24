@@ -1,7 +1,7 @@
 // Fährt den gebauten Renderer in Electron hoch und prüft ihn über das
 // DevTools-Protokoll. Voraussetzung: `npx vite build --config
 // vite.renderer.config.mjs --outDir <dir> --base ./` wurde ausgeführt.
-//   SCENARIO=login|live|live-restore|failover-login|failover-start|failover-logout|failover-vod|http-status npm run test:ui
+//   SCENARIO=login|live|live-restore|failover-login|failover-start|failover-logout|failover-vod|http-status|auth0-list npm run test:ui
 // Weitere Schalter: TEST_CHANNELS, TEST_PREFIXED, TEST_EPG_KEYS — siehe
 // test/README.md.
 import { spawn } from 'node:child_process';
@@ -105,6 +105,14 @@ const STORES = {
     savedAccounts: [
       { baseUrl: 'http://s513.example:8080', username: 'anna', password: 'p1' },
       { baseUrl: 'http://a.example:8080', username: 'ben', password: 'p2' },
+    ],
+    settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
+  },
+  // Gespeicherter Zugang, dessen erste URL beim Listenladen auth 0 meldet (TEST_AUTH0_LIST_HOSTS);
+  // die zweite URL würde antworten, der Wechsel dorthin darf nicht passieren.
+  'auth0-list': {
+    savedAccounts: [
+      { baseUrl: 'http://revoked.example:8080', baseUrls: ['http://revoked.example:8080', 'http://b.example:8080'], username: 'anna', password: 'p1' },
     ],
     settings: { defaultMode: 'live', hlsBuffer: 'normal', epgUrl: '' },
   },
@@ -252,6 +260,7 @@ async function run() {
         TEST_DEAD_VOD_HOSTS: SCENARIO === 'failover-vod' ? 'http://a.example:8080' : '',
         TEST_AUTH0_HOSTS: SCENARIO === 'failover-login' ? 'http://auth0.example:8080' : '',
         TEST_NOJSON_HOSTS: SCENARIO === 'failover-login' ? 'http://nojson.example:8080' : '',
+        TEST_AUTH0_LIST_HOSTS: SCENARIO === 'auth0-list' ? 'http://revoked.example:8080' : '',
         TEST_HTTP513_HOSTS: SCENARIO === 'http-status' ? 'http://s513.example:8080' : '',
         TEST_STREAM_BASE: SCENARIO === 'http-status' ? `http://127.0.0.1:${HTTP_PORT}/http513` : '',
         TEST_VOD_DELAY: SCENARIO === 'vod-delay' ? '6000' : '0',
@@ -363,6 +372,21 @@ async function run() {
     const playErr = await waitUntil(() => ev(`document.querySelector('.video-error-msg')?.textContent || null`), (v) => !!v, 15000);
     const spinner = await ev(`document.body.textContent.includes('Verbinde…')`);
     check('Wiedergabe nennt den HTTP-Status', playErr === want && !spinner, `${playErr}, Spinner: ${spinner}`);
+  }
+
+  if (SCENARIO === 'auth0-list') {
+    console.log('\nSzenario: abgelehnte Zugangsdaten beim Listenladen');
+    await waitUntil(() => ev(`!!document.querySelector('.saved-account-row')`), (v) => v);
+    await ev(`[...document.querySelectorAll('.saved-account-row')].find(r => r.textContent.includes('revoked.example')).click()`);
+    const toast = await waitUntil(() => ev(`document.querySelector('.toast-error')?.textContent || null`), (v) => !!v);
+    check('Listenladen meldet abgelehnte Zugangsdaten ohne JS-Fehlertext',
+      toast === 'Kanäle konnten nicht geladen werden: Ungültige Zugangsdaten.' && !toast.includes('remote method') && !toast.includes('TypeError'), String(toast));
+    await wait(1000);
+    const chip = await ev(`document.querySelector('.account-chip')?.textContent || ''`);
+    const savedUrl = (await ev(`window.iptv.storeGet('savedAccounts')`))[0].baseUrl;
+    check('auth 0 beim Listenladen wechselt die URL nicht',
+      chip.startsWith('anna@revoked.example') && savedUrl !== 'http://b.example:8080',
+      `${chip}, gespeichert: ${savedUrl}`);
   }
 
   if (SCENARIO === 'failover-start') {

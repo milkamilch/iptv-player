@@ -3,6 +3,7 @@ import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { updateElectronApp } from 'update-electron-app';
 import { fetchText as fetchTextWith } from './fetch-text.mjs';
+import { assertAuthorized } from './auth-rejected.mjs';
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 import path from 'node:path';
@@ -190,6 +191,7 @@ ipcMain.handle('load-xtream-channels', async (_event, baseUrl, username, passwor
     fetchJson(`${base}&action=get_live_categories`),
     fetchJson(`${base}&action=get_live_streams`),
   ]);
+  assertAuthorized(categories, streams);
 
   // Build category id → name map
   const catMap = {};
@@ -222,6 +224,7 @@ ipcMain.handle('load-xtream-vod', async (_event, baseUrl, username, password) =>
     fetchJson(`${base}&action=get_vod_categories`),
     fetchJson(`${base}&action=get_vod_streams`),
   ]);
+  assertAuthorized(categories, streams);
   const catMap = {};
   for (const cat of (categories || [])) catMap[cat.category_id] = cat.category_name;
 
@@ -247,6 +250,7 @@ ipcMain.handle('load-xtream-series', async (_event, baseUrl, username, password)
     fetchJson(`${base}&action=get_series_categories`),
     fetchJson(`${base}&action=get_series`),
   ]);
+  assertAuthorized(categories, series);
   const catMap = {};
   for (const cat of (categories || [])) catMap[cat.category_id] = cat.category_name;
 

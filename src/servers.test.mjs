@@ -61,6 +61,16 @@ test('bricht bei stop ohne Wechsel ab', async () => {
   assert.deepEqual(calls, ['a']);
 });
 
+test('abgelehnte Zugangsdaten brechen ohne Wechsel ab', async () => {
+  const calls = [];
+  const err = new Error("Error invoking remote method 'load-xtream-channels': Error: Ungültige Zugangsdaten.");
+  await assert.rejects(
+    firstWorking(['a', 'b'], async (u) => { calls.push(u); throw err; }),
+    (e) => e === err,
+  );
+  assert.deepEqual(calls, ['a']);
+});
+
 test('wirft den letzten Fehler, wenn keine URL geht', async () => {
   await assert.rejects(
     firstWorking(['a', 'b'], async (u) => { throw new Error('tot ' + u); }),

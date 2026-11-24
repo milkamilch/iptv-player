@@ -13,6 +13,7 @@ import { getHistory, getSettings, saveSettings, clearAllProgress, DEFAULT_SETTIN
 import { buildCountryIndex, categoryCounts, FAVORITES, CONTINUE } from './country.mjs';
 import { urlsOf, failoverOrder, firstWorking, sameAccount } from './servers.mjs';
 import { httpStatusOf, statusMessage } from './http-status.mjs';
+import { AUTH_REJECTED, isAuthRejected } from './auth-rejected.mjs';
 import './App.css';
 
 export default function App() {
@@ -342,7 +343,7 @@ export default function App() {
       setActiveGroup(null);
       showToast(`${chs.length} Kanäle geladen`, 'success');
     } catch (e) {
-      if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + (statusMessage(httpStatusOf(e)) ?? e.message), 'error');
+      if (loginNonceRef.current === loginId) showToast('Kanäle konnten nicht geladen werden: ' + (isAuthRejected(e) ? AUTH_REJECTED : statusMessage(httpStatusOf(e)) ?? e.message), 'error');
     }
 
     setLoading(false);

@@ -1,5 +1,6 @@
 // Liste von Server-URLs eines Xtream-Zugangs und der Wechsel zwischen ihnen.
 // Bewusst frei von React und IPC, damit es per `node --test` direkt prüfbar ist.
+import { isAuthRejected } from './auth-rejected.mjs';
 
 function normalizeUrl(raw) {
   let u = raw.trim().replace(/\/+$/, '');
@@ -25,7 +26,7 @@ export function failoverOrder(urls, active) {
 }
 
 // Liefert { baseUrl, value } der ersten URL, bei der attempt klappt.
-// err.stop bricht ohne Wechsel ab; scheitern alle, gilt der letzte Fehler.
+// err.stop bricht ohne Wechsel ab, abgelehnte Zugangsdaten ebenso; scheitern alle, gilt der letzte Fehler.
 export async function firstWorking(urls, attempt) {
   if (!urls.length) throw new Error('Keine Server-URL.');
   let last;
@@ -33,7 +34,7 @@ export async function firstWorking(urls, attempt) {
     try {
       return { baseUrl, value: await attempt(baseUrl) };
     } catch (err) {
-      if (err?.stop) throw err;
+      if (err?.stop || isAuthRejected(err)) throw err;
       last = err;
     }
   }
